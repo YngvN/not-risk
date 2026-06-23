@@ -1,0 +1,40 @@
+{
+  "home": {
+    "title": "Home",
+    "welcome": "Welcome to Expo Template",
+    "description": "A production-ready Expo starter with theming, i18n, and reusable components."
+  },
+  "components": {
+    "title": "Components",
+    "description": "Preview all available UI components.",
+    "buttons": "Buttons",
+    "typography": "Typography",
+    "inputs": "Inputs",
+    "cards": "Cards",
+    "modals": "Modal",
+    "animations": "Animations"
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "language": "Language",
+    "languageSelect": "Select Language"
+  },
+  "modal": {
+    "open": "Open Modal",
+    "exampleTitle": "Example Modal",
+    "exampleContent": "This sheet springs up from the bottom. Tap the backdrop or press Close to dismiss it with an animated exit.",
+    "close": "Close"
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "back": "Back",
+    "loading": "Loading..."
+  }
+}

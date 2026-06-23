@@ -1,0 +1,40 @@
+{
+  "home": {
+    "title": "Hjem",
+    "welcome": "Velkommen til Expo-mal",
+    "description": "En produksjonsklar Expo-starter med temaer, i18n og gjenbrukbare komponenter."
+  },
+  "components": {
+    "title": "Komponenter",
+    "description": "Forhåndsvis alle tilgjengelige UI-komponenter.",
+    "buttons": "Knapper",
+    "typography": "Typografi",
+    "inputs": "Inndatafelt",
+    "cards": "Kort",
+    "modals": "Modal",
+    "animations": "Animasjoner"
+  },
+  "settings": {
+    "title": "Innstillinger",
+    "appearance": "Utseende",
+    "theme": "Tema",
+    "themeLight": "Lys",
+    "themeDark": "Mørk",
+    "language": "Språk",
+    "languageSelect": "Velg språk"
+  },
+  "modal": {
+    "open": "Åpne modal",
+    "exampleTitle": "Eksempel-modal",
+    "exampleContent": "Dette arket spretter opp fra bunnen. Trykk på bakgrunnen eller Lukk for å lukke det med animert avgang.",
+    "close": "Lukk"
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Avbryt",
+    "save": "Lagre",
+    "delete": "Slett",
+    "back": "Tilbake",
+    "loading": "Laster..."
+  }
+}
