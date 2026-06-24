@@ -18,14 +18,26 @@ import { TerritoryId } from './riskWorldTerritories';
  * are stored as class-based (not id-based) paths in world.svg.
  * Bounding-box centroids used for label positions below.
  */
+/**
+ * SVG clip-path IDs used to split countries that span multiple Risk territories.
+ * A clip path ID here means ALL class paths for that territory get clipped.
+ * The matching <ClipPath> elements are defined in AfricaWorldMap.tsx.
+ */
+export const AFRICA_CLIP_IDS: Partial<Record<TerritoryId, string>> = {
+  // Australia split at 135°E (x≈1729 in world.svg coords)
+  westernAustralia: 'au-west',
+  easternAustralia: 'au-east',
+};
+
 export const AFRICA_CLASS_PATH_NAMES: Partial<Record<TerritoryId, string[]>> = {
   // ── Australia continent ────────────────────────────────────────────────────
-  // bbox sources: AU(1603-1829,570-782), ID(1526-1786,467-568),
-  //               PG(1783-1869,518-570), NZ(1827-1930,723-801)
+  // Actual bboxes: AU mainland(1603-1829,570-752), Tasmania(1735-1758,763-782)
+  //                ID(1526-1786,467-568), PG(1783-1869,518-570), NZ(1827-1930,723-801)
+  // Split at 135°E → x=1729. Tasmania(x:1735+) falls in the east half.
   indonesia:        ['Indonesia'],
   newGuinea:        ['Papua New Guinea'],
-  westernAustralia: ['Australia'],        // full AU shape; W/E split via label only for now
-  easternAustralia: ['New Zealand'],
+  westernAustralia: ['Australia'],              // clipped to left of x=1729
+  easternAustralia: ['Australia', 'New Zealand'], // Australia clipped to right of x=1729, NZ unclipped
 
   // ── Europe ─────────────────────────────────────────────────────────────────
   greatBritain:    ['United Kingdom'],
@@ -124,6 +136,6 @@ export const AFRICA_LABELS: Record<TerritoryId, { x: number; y: number }> = {
   // Australia — positions from actual bboxes
   indonesia:      { x: 1656, y: 517 },   // actual ID center
   newGuinea:      { x: 1826, y: 544 },   // actual PG center
-  westernAustralia: { x: 1660, y: 676 }, // left half of AU bbox (1603-1716, 570-782)
-  easternAustralia: { x: 1878, y: 762 }, // actual NZ bbox center
+  westernAustralia: { x: 1666, y: 661 }, // center of AU west half (1603-1729, 570-752)
+  easternAustralia: { x: 1779, y: 661 }, // center of AU east half (1729-1829, 570-752)
 };

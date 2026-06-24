@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import Svg, { G, Path, Polygon, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Path, Polygon, Text as SvgText, Defs, ClipPath, Rect } from 'react-native-svg';
 import Animated, { useAnimatedProps, withSpring } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
 import { TERRITORIES, Territory, TerritoryId } from '../../constants/riskWorldTerritories';
-import { AFRICA_POLYGONS, AFRICA_LABELS, AFRICA_CLASS_PATH_NAMES } from '../../constants/riskAfricaOverrides';
+import { AFRICA_POLYGONS, AFRICA_LABELS, AFRICA_CLASS_PATH_NAMES, AFRICA_CLIP_IDS } from '../../constants/riskAfricaOverrides';
 import { WORLD_AFRICA_PATHS } from '../../assets/maps/worldAfricaPaths';
 import { WORLD_AFRICA_ALL_PATHS } from '../../assets/maps/worldAfricaAllPaths';
 import { WORLD_AFRICA_CLASS_PATHS } from '../../assets/maps/worldAfricaClassPaths';
@@ -83,16 +83,33 @@ export function AfricaWorldMap({ showRiskLayer = true, onTerritorySelect, onCoun
 
   return (
     <Svg viewBox={VIEWBOX} width="100%" style={{ aspectRatio: VIEWBOX_ASPECT }}>
+      {/*
+        Australia split clip paths.
+        135°E = x≈1729 in world.svg coords (splits WA+NT vs QLD+NSW+VIC).
+        Tasmania (x:1735-1758) naturally falls in the east clip.
+      */}
+      <Defs>
+        <ClipPath id="au-west">
+          <Rect x={0} y={0} width={1729} height={857} />
+        </ClipPath>
+        <ClipPath id="au-east">
+          <Rect x={1729} y={0} width={271} height={857} />
+        </ClipPath>
+      </Defs>
+
       {TERRITORIES.map(territory => {
-        const polygonPoints = AFRICA_POLYGONS[territory.id] ?? territory.polygonPoints;
+        // Only fall back to the Pacific polygon if this territory has no Africa-specific
+        // polygon AND no class paths — otherwise the Pacific rectangles appear on the wrong map.
+        const classNames = AFRICA_CLASS_PATH_NAMES[territory.id];
+        const polygonPoints = AFRICA_POLYGONS[territory.id] ??
+          (classNames?.length ? undefined : territory.polygonPoints);
         const labelPos = AFRICA_LABELS[territory.id];
         const isSelected = selectedRiskId === territory.id;
         const fill = colors[territory.colorToken];
         const stroke = isSelected ? colors.territorySelectedBorder : colors.territoryBorder;
         const { x, y } = labelPos;
         const label = shortLabel(territory.id);
-
-        const classNames = AFRICA_CLASS_PATH_NAMES[territory.id];
+        const clipId = AFRICA_CLIP_IDS[territory.id];
 
         return (
           <AfricaTerritoryGroup
@@ -100,6 +117,7 @@ export function AfricaWorldMap({ showRiskLayer = true, onTerritorySelect, onCoun
             territoryId={territory.id}
             svgIds={territory.svgIds}
             classPathNames={classNames}
+            clipPathId={clipId}
             polygonPoints={polygonPoints}
             isSelected={isSelected}
             onPress={handleRiskPress}
@@ -119,6 +137,8 @@ interface AfricaTerritoryGroupProps {
   territoryId: TerritoryId;
   svgIds: string[];
   classPathNames?: string[];
+  /** If set, class-based paths are clipped to this SVG clip-path id. */
+  clipPathId?: string;
   polygonPoints?: string;
   isSelected: boolean;
   onPress: (id: TerritoryId) => void;
@@ -128,12 +148,14 @@ interface AfricaTerritoryGroupProps {
 }
 
 function AfricaTerritoryGroup({
-  territoryId, svgIds, classPathNames, polygonPoints, isSelected, onPress,
-  fill, stroke, labelX, labelY, label, textColor, bgColor,
+  territoryId, svgIds, classPathNames, clipPathId, polygonPoints,
+  isSelected, onPress, fill, stroke, labelX, labelY, label, textColor, bgColor,
 }: AfricaTerritoryGroupProps) {
   const sharedProps = useAnimatedProps(() => ({
     strokeWidth: withSpring(isSelected ? 1.5 : 0.4, { damping: 15, stiffness: 200 }),
   }));
+
+  const clip = clipPathId ? `url(#${clipPathId})` : undefined;
 
   return (
     <G onPress={() => onPress(territoryId)} opacity={isSelected ? 0.88 : 1}>
@@ -143,13 +165,22 @@ function AfricaTerritoryGroup({
         if (!d) return null;
         return <AnimatedPath key={id} d={d} fill={fill} stroke={stroke} animatedProps={sharedProps} />;
       })}
-      {/* class-based paths (52 country groups — Australia, Russia, UK, etc.) */}
+      {/* class-based paths, optionally clipped (e.g. Australia split) */}
       {classPathNames?.map(name => {
         const d = WORLD_AFRICA_CLASS_PATHS[name];
         if (!d) return null;
-        return <AnimatedPath key={`class-${name}`} d={d} fill={fill} stroke={stroke} animatedProps={sharedProps} />;
+        return (
+          <AnimatedPath
+            key={`class-${name}`}
+            d={d}
+            fill={fill}
+            stroke={stroke}
+            clipPath={clip}
+            animatedProps={sharedProps}
+          />
+        );
       })}
-      {/* polygon fallback for countries absent from both id and class paths */}
+      {/* polygon fallback */}
       {polygonPoints && (
         <AnimatedPolygon points={polygonPoints} fill={fill} stroke={stroke} animatedProps={sharedProps} />
       )}
