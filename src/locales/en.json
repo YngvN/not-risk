@@ -51,7 +51,8 @@
     "westernUS": "Western United States",
     "easternUS": "Eastern United States",
     "centralAmerica": "Central America",
-    "kamchatkaNote": "→ Kamchatka"
+    "kamchatkaNote": "→ Kamchatka",
+    "board": "Board"
   },
   "southAmerica": {
     "title": "South America",

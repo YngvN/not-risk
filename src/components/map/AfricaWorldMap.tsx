@@ -83,12 +83,23 @@ export function AfricaWorldMap({ showRiskLayer = true, onTerritorySelect, onCoun
 
   return (
     <Svg viewBox={VIEWBOX} width="100%" style={{ aspectRatio: VIEWBOX_ASPECT }}>
-      {/*
-        Australia split clip paths.
-        135°E = x≈1729 in world.svg coords (splits WA+NT vs QLD+NSW+VIC).
-        Tasmania (x:1735-1758) naturally falls in the east clip.
-      */}
       <Defs>
+        {/* Canada splits: bbox x:348-778, y:3-232.
+            60°N ≈ y=158 (linear: 232 - 11*6.74 ≈ 158).
+            97°W ≈ x=561. 80°W ≈ x=643. */}
+        <ClipPath id="ca-north">
+          <Rect x={0} y={0} width={2000} height={158} />
+        </ClipPath>
+        <ClipPath id="ca-alberta">
+          <Rect x={0} y={158} width={561} height={699} />
+        </ClipPath>
+        <ClipPath id="ca-ontario">
+          <Rect x={561} y={158} width={82} height={699} />
+        </ClipPath>
+        <ClipPath id="ca-quebec">
+          <Rect x={643} y={158} width={857} height={699} />
+        </ClipPath>
+        {/* Australia splits: 135°E = x≈1729. Tasmania (x:1735+) falls in the east clip. */}
         <ClipPath id="au-west">
           <Rect x={0} y={0} width={1729} height={857} />
         </ClipPath>

@@ -24,12 +24,27 @@ import { TerritoryId } from './riskWorldTerritories';
  * The matching <ClipPath> elements are defined in AfricaWorldMap.tsx.
  */
 export const AFRICA_CLIP_IDS: Partial<Record<TerritoryId, string>> = {
+  // Canada split using actual bbox (x:348-778, y:3-232).
+  // 60°N latitude ≈ y=150 (linear interp: 232 - (60-49)/(83-49)*229 ≈ 157, rounded).
+  // 97°W (AB/MB border) ≈ x=560, 80°W (ON/QC border) ≈ x=643.
+  northwest:        'ca-north',   // all Canada above y=150
+  alberta:          'ca-alberta', // Canada x<560, y>150
+  ontario:          'ca-ontario', // Canada 560<x<643, y>150
+  quebec:           'ca-quebec',  // Canada x>643, y>150
   // Australia split at 135°E (x≈1729 in world.svg coords)
   westernAustralia: 'au-west',
   easternAustralia: 'au-east',
 };
 
 export const AFRICA_CLASS_PATH_NAMES: Partial<Record<TerritoryId, string[]>> = {
+  // ── North America ──────────────────────────────────────────────────────────
+  // Canada actual bbox x:348-778, y:3-232 (49°N southern border).
+  // Split lines: y=150 (~60°N), x=560 (97°W/AB-MB), x=643 (80°W/ON-QC).
+  northwest:        ['Canada'],
+  alberta:          ['Canada'],
+  ontario:          ['Canada'],
+  quebec:           ['Canada'],
+
   // ── Australia continent ────────────────────────────────────────────────────
   // Actual bboxes: AU mainland(1603-1829,570-752), Tasmania(1735-1758,763-782)
   //                ID(1526-1786,467-568), PG(1783-1869,518-570), NZ(1827-1930,723-801)
@@ -61,21 +76,38 @@ export const AFRICA_CLASS_PATH_NAMES: Partial<Record<TerritoryId, string[]>> = {
 };
 
 export const AFRICA_POLYGONS: Partial<Record<TerritoryId, string>> = {
-  // ── North America (US, CA, GL not class-based) ────────────────────────────
+  // ── North America ──────────────────────────────────────────────────────────
+  // Canada territories use class paths + clip — NO polygon fallback needed here.
+  // US is absent from world.svg entirely, so polygons are the only option.
+  //
+  // Calibrated from Canada's actual bbox (x:348-778, y:3-232):
+  //   141°W → x=348, 97°W → x=560, 80°W → x=643, 67°W → x=705
+  //   49°N → y=232 (Canada south), 60°N → y≈150, 55°N → y≈196
+  //   Longitude scale ≈ 4.83 px/°, latitude scale ≈ 6.74 px/° (linear avg)
+
+  // ── Canada longitude reference (scale 4.83 px/°, from actual bbox) ─────────
+  //   141°W→348  130°W→401  117°W→464  97°W→561  80°W→643  67°W→706
+  // ── Canada latitude reference (6.74 px/°, 49°N=232, 60°N=158) ─────────────
+  //   71°N→84   65°N→124   60°N→158   56°N→185   54°N→198   49°N→232
+  // ── Mexico latitude / US south (3.53 px/° 49→32°N, then 7.25 px/° below 32°N) ─
+  //   32°N→292   25°N→343
+
+  // Alaska: west of Canada's 141°W edge (x<348).
+  // Vertices in clockwise order: western coast → N → NE corner (Yukon border) →
+  // SE Yukon border → SE panhandle → SW coast.
+  // Alaska connects to Canada at (348, 158) — matches the ca-north/ca-alberta clip boundary.
   alaska:
-    '93,8 160,8 239,15 239,77 298,109 175,109 93,55',
-  northwest:
-    '239,0 676,0 676,77 239,77',
-  alberta:
-    '239,77 476,77 476,146 239,146',
-  ontario:
-    '476,77 568,77 568,178 476,178',
-  quebec:
-    '568,50 720,50 720,173 568,173',
+    '218,124 276,84 348,91 348,158 401,198 258,198 218,153',
+
+  // Western US: 49→32°N, 124→97°W.  Leans left going south (Robinson projection).
+  // Top edge: Canada calibration. Bottom edge: Mexico calibration.
   westernUS:
-    '325,146 476,146 476,266 325,266',
+    '430,232 561,232 454,292 354,292',
+
+  // Eastern US: 49→25°N, 97→67°W + Florida peninsula at 25°N.
+  // At 25°N 81°W → x≈534 using Mexico calibration.
   easternUS:
-    '476,146 638,146 638,298 476,298',
+    '561,232 706,239 534,343 454,292 561,232',
 
   // ── Russia splits (class 'Russian Federation' only used for Siberia above) ─
   ural:
@@ -91,15 +123,16 @@ export const AFRICA_POLYGONS: Partial<Record<TerritoryId, string>> = {
 /** Label centroids in the world.svg (Atlantic-centered) coordinate space. */
 export const AFRICA_LABELS: Record<TerritoryId, { x: number; y: number }> = {
   // North America
-  alaska:         { x: 179,  y: 52  },
-  northwest:      { x: 460,  y: 40  },
-  alberta:        { x: 358,  y: 112 },
-  ontario:        { x: 522,  y: 128 },
-  quebec:         { x: 644,  y: 112 },
-  greenland:      { x: 773,  y: 8   },
-  westernUS:      { x: 400,  y: 206 },
-  easternUS:      { x: 557,  y: 222 },
-  centralAmerica: { x: 514,  y: 330 },
+  // Recalibrated against Canada bbox (x:348-778, y:3-232) and actual Canada center (563,117≈60°N)
+  alaska:         { x: 308,  y: 148 },  // centre of Alaska polygon
+  northwest:      { x: 563,  y: 80  },  // centre of Canada above y=158 (≈60°N)
+  alberta:        { x: 452,  y: 195 },  // centre of Canada x<561, y>158
+  ontario:        { x: 601,  y: 195 },  // centre of Canada 561<x<643, y>158
+  quebec:         { x: 706,  y: 195 },  // centre of Canada x>643, y>158
+  greenland:      { x: 832,  y: 61  },  // actual GL bbox centre
+  westernUS:      { x: 475,  y: 260 },  // centre of Western US polygon
+  easternUS:      { x: 585,  y: 285 },  // centre of Eastern US polygon
+  centralAmerica: { x: 470,  y: 390 },  // near MX/Guatemala centre
   // South America
   venezuela:      { x: 649,  y: 405 },
   peru:           { x: 595,  y: 518 },

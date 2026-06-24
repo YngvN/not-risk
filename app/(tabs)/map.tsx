@@ -3,13 +3,13 @@ import { View, Switch, Pressable, StyleSheet } from 'react-native';
 import { AnimatePresence, MotiView } from 'moti';
 import { Screen } from '../../src/components/layout/Screen';
 import { Text } from '../../src/components/ui/Text';
-import { WorldMap, AfricaWorldMap, ZoomableMap } from '../../src/components/map';
+import { WorldMap, AfricaWorldMap, RiskBoardMap, ZoomableMap } from '../../src/components/map';
 import { Territory, TERRITORIES } from '../../src/constants/riskWorldTerritories';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useLanguage } from '../../src/hooks/useLanguage';
 import { Spacing, BorderRadius } from '../../src/constants/spacing';
 
-type MapView = 'pacific' | 'africa';
+type MapView = 'pacific' | 'africa' | 'board';
 
 /**
  * Map screen — two projections (Pacific / Africa) each with a Risk territory toggle.
@@ -22,14 +22,13 @@ export default function MapScreen() {
   const [view, setView] = useState<MapView>('pacific');
   const [pacificRisk, setPacificRisk] = useState(true);
   const [africaRisk, setAfricaRisk] = useState(true);
+  const [boardRisk, setBoardRisk] = useState(true);
 
-  // Risk mode selection
   const [selectedTerritory, setSelectedTerritory] = useState<Territory | null>(null);
-  // Base mode selection
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
 
-  const showRisk = view === 'pacific' ? pacificRisk : africaRisk;
-  const setRisk = view === 'pacific' ? setPacificRisk : setAfricaRisk;
+  const showRisk = view === 'pacific' ? pacificRisk : view === 'africa' ? africaRisk : boardRisk;
+  const setRisk = view === 'pacific' ? setPacificRisk : view === 'africa' ? setAfricaRisk : setBoardRisk;
 
   const switchView = (v: MapView) => {
     setView(v);
@@ -63,6 +62,14 @@ export default function MapScreen() {
             Africa
           </Text>
         </Pressable>
+        <Pressable
+          style={[styles.selectorTab, view === 'board' && { backgroundColor: colors.primary }]}
+          onPress={() => switchView('board')}
+        >
+          <Text variant="caption" style={{ color: view === 'board' ? '#fff' : colors.textSecondary }}>
+            {t('map.board')}
+          </Text>
+        </Pressable>
       </View>
 
       {/* Map — wrapped in zoom/pan container */}
@@ -73,11 +80,16 @@ export default function MapScreen() {
             onTerritorySelect={t => { setSelectedTerritory(t); setSelectedCountry(null); }}
             onCountrySelect={n => { setSelectedCountry(n); setSelectedTerritory(null); }}
           />
-        ) : (
+        ) : view === 'africa' ? (
           <AfricaWorldMap
             showRiskLayer={africaRisk}
             onTerritorySelect={t => { setSelectedTerritory(t); setSelectedCountry(null); }}
             onCountrySelect={n => { setSelectedCountry(n); setSelectedTerritory(null); }}
+          />
+        ) : (
+          <RiskBoardMap
+            showRiskLayer={boardRisk}
+            onTerritorySelect={t => { setSelectedTerritory(t); setSelectedCountry(null); }}
           />
         )}
       </ZoomableMap>

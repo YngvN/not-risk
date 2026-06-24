@@ -256,3 +256,9 @@ import { Text, Button, AnimatedCard, PressableScale } from '../src/components';
 | [expo-font](https://docs.expo.dev/versions/latest/sdk/font/) | ~13 | Custom font loading |
 | [expo-asset](https://docs.expo.dev/versions/latest/sdk/asset/) | ~11 | Static asset management |
 | [react-dom](https://react.dev) | 19.2.7 | React DOM renderer (web only) |
+
+
+### Credits
+
+Risk map:
+By Gr0gmint - Own work by uploader - based on a Risk board i own., CC BY-SA 3.0, https://commons.wikimedia.org/w/index.php?curid=5184827
