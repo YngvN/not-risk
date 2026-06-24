@@ -63,6 +63,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="map"
+        options={{
+          title: t('map.tabLabel'),
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="map-outline" color={color} size={size} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

@@ -1,6 +1,7 @@
 import '../global.css';
 import { Platform } from 'react-native';
 import { Stack } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from '../src/context/ThemeContext';
 import { LanguageProvider } from '../src/context/LanguageContext';
 
@@ -15,15 +16,17 @@ import { LanguageProvider } from '../src/context/LanguageContext';
  */
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <LanguageProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: Platform.select({ web: 'fade', default: 'ios' }),
-          }}
-        />
-      </LanguageProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <LanguageProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: Platform.select({ web: 'fade', default: 'ios' }),
+            }}
+          />
+        </LanguageProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
