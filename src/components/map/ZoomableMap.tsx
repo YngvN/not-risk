@@ -1,5 +1,5 @@
-import React, { useCallback } from 'react';
-import { View, Pressable, StyleSheet, LayoutChangeEvent } from 'react-native';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { View, Pressable, StyleSheet, LayoutChangeEvent, Platform } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -17,9 +17,16 @@ const ZOOM_STEP = 0.5;
 const SPRING = { damping: 20, stiffness: 220 };
 
 /**
- * Wraps a map SVG in a pinch-to-zoom + pan container.
- * +/− buttons provide programmatic zoom. The tab bar and controls
- * rendered outside this component are unaffected by zoom.
+ * Wraps a map SVG in a pinch-zoom + pan container.
+ *
+ * Input methods handled:
+ *   - Native: pinch-to-zoom + pan (react-native-gesture-handler)
+ *   - Web touchpad pinch: ctrl+wheel event (prevents browser page zoom)
+ *   - Web trackpad two-finger scroll: wheel event without ctrlKey → pan
+ *   - Scroll wheel: ctrl+scroll → zoom
+ *   - +/− buttons: programmatic zoom with spring animation
+ *
+ * The tab bar and controls rendered outside this component are unaffected.
  */
 export function ZoomableMap({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme();
@@ -30,15 +37,27 @@ export function ZoomableMap({ children }: { children: React.ReactNode }) {
   const ty = useSharedValue(0);
   const savedTx = useSharedValue(0);
   const savedTy = useSharedValue(0);
-  const cw = useSharedValue(0); // container width
-  const ch = useSharedValue(0); // container height
+  const cw = useSharedValue(0);
+  const ch = useSharedValue(0);
+
+  const containerRef = useRef<View>(null);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     cw.value = e.nativeEvent.layout.width;
     ch.value = e.nativeEvent.layout.height;
   }, [cw, ch]);
 
-  // ── Pinch gesture ──────────────────────────────────────────────────────────
+  // ── Clamp helpers ──────────────────────────────────────────────────────────
+  const clampTx = (v: number, s: number) => {
+    const max = (cw.value * (s - 1)) / 2;
+    return Math.max(-max, Math.min(max, v));
+  };
+  const clampTy = (v: number, s: number) => {
+    const max = (ch.value * (s - 1)) / 2;
+    return Math.max(-max, Math.min(max, v));
+  };
+
+  // ── Native pinch gesture ───────────────────────────────────────────────────
   const pinch = Gesture.Pinch()
     .onUpdate((e) => {
       scale.value = clamp(savedScale.value * e.scale, MIN_SCALE, MAX_SCALE);
@@ -53,15 +72,13 @@ export function ZoomableMap({ children }: { children: React.ReactNode }) {
       }
     });
 
-  // ── Pan gesture (only moves content when zoomed) ───────────────────────────
+  // ── Native pan gesture ─────────────────────────────────────────────────────
   const pan = Gesture.Pan()
     .averageTouches(true)
     .minDistance(5)
     .onUpdate((e) => {
-      const maxTx = (cw.value * (scale.value - 1)) / 2;
-      const maxTy = (ch.value * (scale.value - 1)) / 2;
-      tx.value = clamp(savedTx.value + e.translationX, -maxTx, maxTx);
-      ty.value = clamp(savedTy.value + e.translationY, -maxTy, maxTy);
+      tx.value = clamp(savedTx.value + e.translationX, -(cw.value * (scale.value - 1)) / 2, (cw.value * (scale.value - 1)) / 2);
+      ty.value = clamp(savedTy.value + e.translationY, -(ch.value * (scale.value - 1)) / 2, (ch.value * (scale.value - 1)) / 2);
     })
     .onEnd(() => {
       savedTx.value = tx.value;
@@ -78,22 +95,77 @@ export function ZoomableMap({ children }: { children: React.ReactNode }) {
     ],
   }));
 
-  // ── Programmatic zoom (called from JS thread) ──────────────────────────────
-  const applyZoom = (next: number) => {
-    const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, next));
-    scale.value = withSpring(clamped, SPRING);
-    savedScale.value = clamped;
+  // ── Web: intercept wheel events ────────────────────────────────────────────
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
 
-    if (clamped <= MIN_SCALE) {
+    const el = containerRef.current as unknown as HTMLElement | null;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault(); // always prevent — we handle both zoom and pan ourselves
+
+      if (e.ctrlKey) {
+        // Touchpad pinch or Ctrl+scroll → zoom around the focal point (cursor position)
+        const oldScale = scale.value;
+        // Use exponential scaling for natural feel: 300px scroll ≈ 2× zoom
+        const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, oldScale * Math.pow(2, -e.deltaY / 300)));
+
+        if (newScale === oldScale) return;
+
+        // Keep the point under the cursor fixed in content space
+        const rect = el.getBoundingClientRect();
+        const focalX = e.clientX - rect.left - rect.width / 2;
+        const focalY = e.clientY - rect.top - rect.height / 2;
+        const ratio = newScale / oldScale;
+
+        const newTx = clampTx(focalX - (focalX - tx.value) * ratio, newScale);
+        const newTy = clampTy(focalY - (focalY - ty.value) * ratio, newScale);
+
+        scale.value = newScale;
+        savedScale.value = newScale;
+        tx.value = newTx;
+        ty.value = newTy;
+        savedTx.value = newTx;
+        savedTy.value = newTy;
+
+        if (newScale <= MIN_SCALE) {
+          tx.value = 0;
+          ty.value = 0;
+          savedTx.value = 0;
+          savedTy.value = 0;
+        }
+      } else {
+        // Two-finger trackpad scroll without pinch → pan (only when zoomed)
+        if (scale.value <= MIN_SCALE) return;
+        const newTx = clampTx(tx.value - e.deltaX, scale.value);
+        const newTy = clampTy(ty.value - e.deltaY, scale.value);
+        tx.value = newTx;
+        ty.value = newTy;
+        savedTx.value = newTx;
+        savedTy.value = newTy;
+      }
+    };
+
+    // { passive: false } is required to call preventDefault() on wheel events
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []); // shared values have stable references — safe to omit from deps
+
+  // ── Programmatic zoom (buttons) ────────────────────────────────────────────
+  const applyZoom = (next: number) => {
+    const s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, next));
+    scale.value = withSpring(s, SPRING);
+    savedScale.value = s;
+
+    if (s <= MIN_SCALE) {
       tx.value = withSpring(0, SPRING);
       ty.value = withSpring(0, SPRING);
       savedTx.value = 0;
       savedTy.value = 0;
     } else {
-      const maxTx = (cw.value * (clamped - 1)) / 2;
-      const maxTy = (ch.value * (clamped - 1)) / 2;
-      const cx = Math.max(-maxTx, Math.min(maxTx, tx.value));
-      const cy = Math.max(-maxTy, Math.min(maxTy, ty.value));
+      const cx = clampTx(tx.value, s);
+      const cy = clampTy(ty.value, s);
       tx.value = withSpring(cx, SPRING);
       ty.value = withSpring(cy, SPRING);
       savedTx.value = cx;
@@ -102,29 +174,23 @@ export function ZoomableMap({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <View style={styles.container} onLayout={onLayout}>
+    <View ref={containerRef} style={styles.container} onLayout={onLayout}>
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.content, animatedStyle]}>
           {children}
         </Animated.View>
       </GestureDetector>
 
-      {/* +/− overlay buttons (bottom-right, outside gesture area) */}
+      {/* +/− buttons — outside GestureDetector, not affected by map gestures */}
       <View
-        style={[
-          styles.zoomButtons,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
+        style={[styles.zoomButtons, { backgroundColor: colors.card, borderColor: colors.border }]}
         pointerEvents="box-none"
       >
         <Pressable
           style={({ pressed }) => [
             styles.zoomBtn,
             { borderBottomWidth: 1, borderBottomColor: colors.border },
-            pressed && { opacity: 0.6 },
+            pressed && { opacity: 0.55 },
           ]}
           onPress={() => applyZoom(scale.value + ZOOM_STEP)}
           hitSlop={8}
@@ -132,7 +198,7 @@ export function ZoomableMap({ children }: { children: React.ReactNode }) {
           <Text style={[styles.zoomBtnText, { color: colors.text }]}>+</Text>
         </Pressable>
         <Pressable
-          style={({ pressed }) => [styles.zoomBtn, pressed && { opacity: 0.6 }]}
+          style={({ pressed }) => [styles.zoomBtn, pressed && { opacity: 0.55 }]}
           onPress={() => applyZoom(scale.value - ZOOM_STEP)}
           hitSlop={8}
         >

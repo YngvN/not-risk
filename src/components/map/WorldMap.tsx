@@ -62,9 +62,9 @@ export function WorldMap({ showRiskLayer = true, onTerritorySelect, onCountrySel
             <Path
               key={iso}
               d={d}
-              fill={colors.surface}
-              stroke={isSelected ? colors.primary : colors.border}
-              strokeWidth={isSelected ? 1.2 : 0.4}
+              fill={colors.text}
+              stroke={isSelected ? colors.primary : colors.textSecondary}
+              strokeWidth={isSelected ? 1.2 : 0.3}
               onPress={() => handleCountryPress(iso)}
             />
           );

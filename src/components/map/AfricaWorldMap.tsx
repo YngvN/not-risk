@@ -3,9 +3,10 @@ import Svg, { G, Path, Polygon, Text as SvgText } from 'react-native-svg';
 import Animated, { useAnimatedProps, withSpring } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
 import { TERRITORIES, Territory, TerritoryId } from '../../constants/riskWorldTerritories';
-import { AFRICA_POLYGONS, AFRICA_LABELS } from '../../constants/riskAfricaOverrides';
+import { AFRICA_POLYGONS, AFRICA_LABELS, AFRICA_CLASS_PATH_NAMES } from '../../constants/riskAfricaOverrides';
 import { WORLD_AFRICA_PATHS } from '../../assets/maps/worldAfricaPaths';
 import { WORLD_AFRICA_ALL_PATHS } from '../../assets/maps/worldAfricaAllPaths';
+import { WORLD_AFRICA_CLASS_PATHS } from '../../assets/maps/worldAfricaClassPaths';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedPolygon = Animated.createAnimatedComponent(Polygon);
@@ -63,9 +64,9 @@ export function AfricaWorldMap({ showRiskLayer = true, onTerritorySelect, onCoun
             <Path
               key={i}
               d={entry.d}
-              fill={colors.surface}
-              stroke={isSelected ? colors.primary : colors.border}
-              strokeWidth={isSelected ? 1.2 : 0.4}
+              fill={colors.text}
+              stroke={isSelected ? colors.primary : colors.textSecondary}
+              strokeWidth={isSelected ? 1.2 : 0.3}
               onPress={() => handlePress(i)}
             />
           );
@@ -91,11 +92,14 @@ export function AfricaWorldMap({ showRiskLayer = true, onTerritorySelect, onCoun
         const { x, y } = labelPos;
         const label = shortLabel(territory.id);
 
+        const classNames = AFRICA_CLASS_PATH_NAMES[territory.id];
+
         return (
           <AfricaTerritoryGroup
             key={territory.id}
             territoryId={territory.id}
             svgIds={territory.svgIds}
+            classPathNames={classNames}
             polygonPoints={polygonPoints}
             isSelected={isSelected}
             onPress={handleRiskPress}
@@ -114,6 +118,7 @@ export function AfricaWorldMap({ showRiskLayer = true, onTerritorySelect, onCoun
 interface AfricaTerritoryGroupProps {
   territoryId: TerritoryId;
   svgIds: string[];
+  classPathNames?: string[];
   polygonPoints?: string;
   isSelected: boolean;
   onPress: (id: TerritoryId) => void;
@@ -123,25 +128,30 @@ interface AfricaTerritoryGroupProps {
 }
 
 function AfricaTerritoryGroup({
-  territoryId, svgIds, polygonPoints, isSelected, onPress,
+  territoryId, svgIds, classPathNames, polygonPoints, isSelected, onPress,
   fill, stroke, labelX, labelY, label, textColor, bgColor,
 }: AfricaTerritoryGroupProps) {
-  const pathProps = useAnimatedProps(() => ({
-    strokeWidth: withSpring(isSelected ? 1.5 : 0.4, { damping: 15, stiffness: 200 }),
-  }));
-  const polyProps = useAnimatedProps(() => ({
+  const sharedProps = useAnimatedProps(() => ({
     strokeWidth: withSpring(isSelected ? 1.5 : 0.4, { damping: 15, stiffness: 200 }),
   }));
 
   return (
     <G onPress={() => onPress(territoryId)} opacity={isSelected ? 0.88 : 1}>
+      {/* id-based paths (169 named countries) */}
       {svgIds.map(id => {
         const d = WORLD_AFRICA_PATHS[id];
         if (!d) return null;
-        return <AnimatedPath key={id} d={d} fill={fill} stroke={stroke} animatedProps={pathProps} />;
+        return <AnimatedPath key={id} d={d} fill={fill} stroke={stroke} animatedProps={sharedProps} />;
       })}
+      {/* class-based paths (52 country groups — Australia, Russia, UK, etc.) */}
+      {classPathNames?.map(name => {
+        const d = WORLD_AFRICA_CLASS_PATHS[name];
+        if (!d) return null;
+        return <AnimatedPath key={`class-${name}`} d={d} fill={fill} stroke={stroke} animatedProps={sharedProps} />;
+      })}
+      {/* polygon fallback for countries absent from both id and class paths */}
       {polygonPoints && (
-        <AnimatedPolygon points={polygonPoints} fill={fill} stroke={stroke} animatedProps={polyProps} />
+        <AnimatedPolygon points={polygonPoints} fill={fill} stroke={stroke} animatedProps={sharedProps} />
       )}
       <SvgText x={labelX} y={labelY} textAnchor="middle" alignmentBaseline="middle"
         fontSize={7} fontWeight="bold" fill="none" stroke={bgColor} strokeWidth={2}
