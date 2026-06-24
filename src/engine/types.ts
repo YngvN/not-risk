@@ -8,11 +8,31 @@ export type PlayerColor = 'red' | 'blue' | 'green' | 'yellow' | 'black' | 'pink'
 
 export type GameMode = 'classic' | 'mission' | 'capital';
 
-export type Phase = 'SETUP' | 'REINFORCE' | 'ATTACK' | 'FORTIFY' | 'GAME_OVER';
+export type Phase = 'SETUP' | 'HQ_SELECTION' | 'REINFORCE' | 'ATTACK' | 'FORTIFY' | 'GAME_OVER';
 
 export type SetupSubPhase = 'CLAIMING' | 'PLACING';
 
 export type CardSymbol = 'infantry' | 'cavalry' | 'artillery' | 'wild';
+
+// ── Mission cards (Mode 2) ────────────────────────────────────────────────────
+
+export type MissionType =
+  | 'TWO_CONTINENTS'
+  | 'TWO_CONTINENTS_PLUS_ONE'
+  | 'HOLD_24'
+  | 'HOLD_18_TWO_ARMIES'
+  | 'DESTROY_PLAYER';
+
+export interface MissionCard {
+  id: string;
+  type: MissionType;
+  /** Named continents for conquest missions. */
+  continents?: [ContinentId, ContinentId];
+  /** Target player color for DESTROY_PLAYER missions. */
+  targetColor?: PlayerColor;
+}
+
+// ── Risk cards ────────────────────────────────────────────────────────────────
 
 export interface RiskCard {
   id: string;
@@ -20,6 +40,8 @@ export interface RiskCard {
   /** null for wild cards */
   territoryId: TerritoryId | null;
 }
+
+// ── Core entities ─────────────────────────────────────────────────────────────
 
 export interface TerritoryState {
   id: TerritoryId;
@@ -33,15 +55,21 @@ export interface Player {
   color: PlayerColor;
   alive: boolean;
   hand: RiskCard[];
+  // Mode 2 — Secret Mission
+  mission: MissionCard | null;
+  // Mode 3 — Capital Risk
+  hqTerritoryId: TerritoryId | null;
+  /** True once player has submitted their HQ choice (hidden until reveal). */
+  hqChosen: boolean;
+  /** IDs of players whose HQ this player has captured. */
+  capturedHqPlayerIds: PlayerId[];
 }
 
 /** Context kept while a territory capture is awaiting the player's army-movement choice. */
 export interface CaptureContext {
   from: TerritoryId;
   to: TerritoryId;
-  /** Minimum armies to move in (= number of dice rolled in winning battle). */
   minArmies: number;
-  /** Maximum armies to move in (= attacking territory armies − 1). */
   maxArmies: number;
 }
 
@@ -62,28 +90,18 @@ export interface GameState {
   territories: Record<TerritoryId, TerritoryState>;
   deck: RiskCard[];
   discardPile: RiskCard[];
-  /** Global counter used for escalating card trade-in values. */
   setsTraded: number;
-  /** Set on first capture; cleared at end of turn; drives one-card-per-turn draw. */
   capturedThisTurn: boolean;
-  /** Remaining armies each player must still place during SETUP. */
   setupArmiesRemaining: Record<PlayerId, number>;
-  /** Armies left to place during REINFORCE. */
   reinforcementsRemaining: number;
-  /** Non-null when a capture is waiting for OCCUPY action. */
   captureContext: CaptureContext | null;
-  /** Most recent battle result; used to drive dice display in the UI. */
   lastBattleResult: BattleResult | null;
-  /** When true, player must trade cards before taking other actions. */
   mustTradeCards: boolean;
-  /** When true, remaining setup armies were (or will be) placed randomly. */
-  randomPlacement: boolean;
-  /**
-   * Non-null when a card trade matched territories the player owns (E5.4).
-   * Contains the eligible TerritoryIds; player must pick one for +2 armies
-   * before continuing. Null when auto-resolved (only one match).
-   */
   pendingTerritoryBonus: TerritoryId[] | null;
+  randomPlacement: boolean;
+  // Mode 3 — Capital Risk
+  /** True after all players have revealed their HQ simultaneously. */
+  hqsRevealed: boolean;
   winner: PlayerId | null;
 }
 
@@ -98,4 +116,7 @@ export type GameAction =
   | { type: 'OCCUPY'; armies: number }
   | { type: 'END_ATTACK' }
   | { type: 'FORTIFY'; from: TerritoryId; to: TerritoryId; armies: number }
-  | { type: 'END_FORTIFY' };
+  | { type: 'END_FORTIFY' }
+  // Mode 3 — Capital Risk
+  | { type: 'SELECT_HQ'; territoryId: TerritoryId }
+  | { type: 'REVEAL_HQS' };

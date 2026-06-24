@@ -2,6 +2,7 @@ import { TERRITORIES } from '../constants/riskWorldTerritories';
 import type { GameState, GameMode, Player, PlayerColor, TerritoryId } from './types';
 import { createDeck } from './cards';
 import { calcReinforcements } from './reinforcement';
+import { dealMissions } from './missions';
 
 const STARTING_ARMIES: Record<number, number> = { 2: 40, 3: 35, 4: 30, 5: 25, 6: 20 };
 
@@ -21,10 +22,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-/**
- * Randomly distributes each player's remaining setup armies across their owned territories.
- * Used when randomPlacement is true, both at game creation and mid-setup.
- */
+/** Randomly drops each player's remaining setup armies across their owned territories. */
 export function autoPlaceArmies(
   territories: GameState['territories'],
   players: Player[],
@@ -32,9 +30,7 @@ export function autoPlaceArmies(
 ): GameState['territories'] {
   const result = { ...territories };
   for (const player of players.filter(p => p.alive)) {
-    const owned = (Object.keys(result) as TerritoryId[]).filter(
-      id => result[id]?.owner === player.id,
-    );
+    const owned = (Object.keys(result) as TerritoryId[]).filter(id => result[id]?.owner === player.id);
     if (owned.length === 0) continue;
     let remaining = setupArmiesRemaining[player.id] ?? 0;
     while (remaining-- > 0) {
@@ -45,10 +41,26 @@ export function autoPlaceArmies(
   return result;
 }
 
+function makePlayers(configs: PlayerConfig[]): Player[] {
+  return configs.map((cfg, i) => ({
+    id: `player_${i}`,
+    name: cfg.name,
+    color: cfg.color,
+    alive: true,
+    hand: [],
+    mission: null,
+    hqTerritoryId: null,
+    hqChosen: false,
+    capturedHqPlayerIds: [],
+  }));
+}
+
 /**
- * Constructs the initial GameState from a host configuration.
- * - setupMode 'random': territories dealt evenly at random.
- * - randomPlacement: remaining armies are placed automatically; game starts at REINFORCE.
+ * Constructs the initial GameState.
+ * - setupMode 'random': territories dealt randomly round-robin.
+ * - randomPlacement: armies auto-placed; skips PLACING phase.
+ * - mode 'mission': missions dealt after setup.
+ * - mode 'capital': enters HQ_SELECTION phase after armies are placed.
  */
 export function createGame(
   mode: GameMode,
@@ -59,13 +71,7 @@ export function createGame(
   const playerCount = playerConfigs.length;
   const startingArmies = STARTING_ARMIES[playerCount] ?? 20;
 
-  const players: Player[] = playerConfigs.map((cfg, i) => ({
-    id: `player_${i}`,
-    name: cfg.name,
-    color: cfg.color,
-    alive: true,
-    hand: [],
-  }));
+  let players = makePlayers(playerConfigs);
 
   let territories = Object.fromEntries(
     TERRITORIES.map(t => [t.id, { id: t.id, owner: null, armies: 0 }]),
@@ -77,7 +83,7 @@ export function createGame(
     players.map(p => [p.id, startingArmies]),
   ) as Record<string, number>;
 
-  const baseState: Omit<GameState, 'phase' | 'setupSubPhase' | 'activePlayerId' | 'reinforcementsRemaining' | 'mustTradeCards'> = {
+  const base: Omit<GameState, 'phase' | 'setupSubPhase' | 'activePlayerId' | 'reinforcementsRemaining' | 'mustTradeCards'> = {
     mode,
     players,
     territories,
@@ -90,11 +96,11 @@ export function createGame(
     lastBattleResult: null,
     pendingTerritoryBonus: null,
     randomPlacement,
+    hqsRevealed: false,
     winner: null,
   };
 
   if (setupMode === 'random') {
-    // Deal territories randomly, round-robin; each gets 1 army from that player's pool
     const shuffled = shuffle(TERRITORIES.map(t => t.id));
     shuffled.forEach((id, idx) => {
       const player = players[idx % playerCount];
@@ -103,39 +109,18 @@ export function createGame(
     });
 
     if (randomPlacement) {
-      // Also place remaining armies randomly → start directly at REINFORCE
       territories = autoPlaceArmies(territories, players, setupArmiesRemaining);
+      if (mode === 'mission') players = dealMissions(players);
       const firstPlayer = players[0];
-      const reinforcements = calcReinforcements(firstPlayer.id, { ...baseState, territories } as GameState);
-      return {
-        ...baseState,
-        territories,
-        setupArmiesRemaining: Object.fromEntries(players.map(p => [p.id, 0])) as Record<string, number>,
-        phase: 'REINFORCE',
-        setupSubPhase: 'PLACING',
-        activePlayerId: firstPlayer.id,
-        reinforcementsRemaining: reinforcements,
-        mustTradeCards: false,
-      };
+      const reinforcements = calcReinforcements(firstPlayer.id, { ...base, territories, players } as GameState);
+      if (mode === 'capital') {
+        return { ...base, territories, players, setupArmiesRemaining: Object.fromEntries(players.map(p => [p.id, 0])), phase: 'HQ_SELECTION', setupSubPhase: 'PLACING', activePlayerId: firstPlayer.id, reinforcementsRemaining: 0, mustTradeCards: false };
+      }
+      return { ...base, territories, players, setupArmiesRemaining: Object.fromEntries(players.map(p => [p.id, 0])), phase: 'REINFORCE', setupSubPhase: 'PLACING', activePlayerId: firstPlayer.id, reinforcementsRemaining: reinforcements, mustTradeCards: false };
     }
 
-    return {
-      ...baseState,
-      territories,
-      phase: 'SETUP',
-      setupSubPhase: 'PLACING',
-      activePlayerId: players[0].id,
-      reinforcementsRemaining: 0,
-      mustTradeCards: false,
-    };
+    return { ...base, territories, players, phase: 'SETUP', setupSubPhase: 'PLACING', activePlayerId: players[0].id, reinforcementsRemaining: 0, mustTradeCards: false };
   }
 
-  return {
-    ...baseState,
-    phase: 'SETUP',
-    setupSubPhase: 'CLAIMING',
-    activePlayerId: players[0].id,
-    reinforcementsRemaining: 0,
-    mustTradeCards: false,
-  };
+  return { ...base, phase: 'SETUP', setupSubPhase: 'CLAIMING', activePlayerId: players[0].id, reinforcementsRemaining: 0, mustTradeCards: false };
 }

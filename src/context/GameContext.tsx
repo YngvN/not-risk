@@ -1,51 +1,82 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import type { GameState, GameAction, PlayerColor } from '../engine/types';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { GameState, GameAction, PlayerColor, GameMode } from '../engine/types';
 import { createGame, type PlayerConfig, type SetupMode } from '../engine/setup';
 import { dispatch as engineDispatch } from '../engine/stateMachine';
 import { Colors } from '../constants/colors';
 
-/** Maps PlayerColor to its hex value (same in light and dark). */
+const SAVE_KEY = '@risk_game_state';
+
 export const PLAYER_COLOR_HEX: Record<PlayerColor, string> = {
-  red: Colors.light.playerRed,
-  blue: Colors.light.playerBlue,
-  green: Colors.light.playerGreen,
+  red:    Colors.light.playerRed,
+  blue:   Colors.light.playerBlue,
+  green:  Colors.light.playerGreen,
   yellow: Colors.light.playerYellow,
-  black: Colors.light.playerBlack,
-  pink: Colors.light.playerPink,
+  black:  Colors.light.playerBlack,
+  pink:   Colors.light.playerPink,
 };
 
 interface GameContextValue {
   state: GameState | null;
+  hasSavedGame: boolean;
   dispatch: (action: GameAction) => void;
-  startGame: (playerConfigs: PlayerConfig[], setupMode?: SetupMode, randomPlacement?: boolean) => void;
+  startGame: (playerConfigs: PlayerConfig[], mode?: GameMode, setupMode?: SetupMode, randomPlacement?: boolean) => void;
   resetGame: () => void;
+  resumeGame: () => Promise<void>;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState | null>(null);
+  const [hasSavedGame, setHasSavedGame] = useState(false);
+
+  // Check for a saved game on mount
+  useEffect(() => {
+    AsyncStorage.getItem(SAVE_KEY).then(raw => {
+      setHasSavedGame(raw !== null);
+    });
+  }, []);
+
+  // Auto-save whenever state changes
+  useEffect(() => {
+    if (state) {
+      AsyncStorage.setItem(SAVE_KEY, JSON.stringify(state));
+      setHasSavedGame(true);
+    }
+  }, [state]);
 
   const dispatch = useCallback((action: GameAction) => {
     setState(prev => (prev ? engineDispatch(action, prev) : prev));
   }, []);
 
-  const startGame = useCallback((playerConfigs: PlayerConfig[], setupMode: SetupMode = 'claim', randomPlacement = false) => {
-    setState(createGame('classic', playerConfigs, setupMode, randomPlacement));
+  const startGame = useCallback((
+    playerConfigs: PlayerConfig[],
+    mode: GameMode = 'classic',
+    setupMode: SetupMode = 'claim',
+    randomPlacement = false,
+  ) => {
+    setState(createGame(mode, playerConfigs, setupMode, randomPlacement));
   }, []);
 
   const resetGame = useCallback(() => {
     setState(null);
+    AsyncStorage.removeItem(SAVE_KEY);
+    setHasSavedGame(false);
+  }, []);
+
+  const resumeGame = useCallback(async () => {
+    const raw = await AsyncStorage.getItem(SAVE_KEY);
+    if (raw) setState(JSON.parse(raw) as GameState);
   }, []);
 
   return (
-    <GameContext.Provider value={{ state, dispatch, startGame, resetGame }}>
+    <GameContext.Provider value={{ state, hasSavedGame, dispatch, startGame, resetGame, resumeGame }}>
       {children}
     </GameContext.Provider>
   );
 }
 
-/** Hook to access game state and dispatch. Throws if used outside GameProvider. */
 export function useGame(): GameContextValue {
   const ctx = useContext(GameContext);
   if (!ctx) throw new Error('useGame must be used inside GameProvider');
