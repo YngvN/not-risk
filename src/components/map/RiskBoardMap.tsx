@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Svg, { G, Path, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Path, Text as SvgText, Circle } from 'react-native-svg';
 import Animated, { useAnimatedProps, withSpring } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
 import { TERRITORIES, Territory, TerritoryId } from '../../constants/riskWorldTerritories';
@@ -137,6 +137,14 @@ function label(svgId: string): string {
 export interface RiskBoardMapProps {
   showRiskLayer?: boolean;
   onTerritorySelect?: (territory: Territory | null) => void;
+  /** Override fill color per TerritoryId (e.g. player color during a game). */
+  territoryFills?: Partial<Record<string, string>>;
+  /** Army count badge per TerritoryId. */
+  armyCounts?: Partial<Record<string, number>>;
+  /** TerritoryIds that render with a highlighted border (valid attack targets, etc.). */
+  highlightedIds?: ReadonlySet<string>;
+  /** When provided, only these TerritoryIds respond to press; others are dimmed. */
+  selectableIds?: ReadonlySet<string>;
 }
 
 /**
@@ -147,7 +155,14 @@ export interface RiskBoardMapProps {
  * @example
  * <RiskBoardMap showRiskLayer onTerritorySelect={t => console.log(t?.id)} />
  */
-export function RiskBoardMap({ showRiskLayer = true, onTerritorySelect }: RiskBoardMapProps) {
+export function RiskBoardMap({
+  showRiskLayer = true,
+  onTerritorySelect,
+  territoryFills,
+  armyCounts,
+  highlightedIds,
+  selectableIds,
+}: RiskBoardMapProps) {
   const { colors } = useTheme();
   const [selectedSvgId, setSelectedSvgId] = useState<string | null>(null);
 
@@ -157,9 +172,11 @@ export function RiskBoardMap({ showRiskLayer = true, onTerritorySelect }: RiskBo
 
   const handlePress = (svgId: string) => {
     if (!showRiskLayer) return;
+    const territoryId = SVG_ID_TO_TERRITORY[svgId];
+    // Reject press if selectableIds is provided and this territory isn't in it
+    if (selectableIds && territoryId && !selectableIds.has(territoryId)) return;
     const next = selectedSvgId === svgId ? null : svgId;
     setSelectedSvgId(next);
-    const territoryId = SVG_ID_TO_TERRITORY[svgId];
     onTerritorySelect?.(
       next && territoryId
         ? TERRITORIES.find(t => t.id === territoryId) ?? null
@@ -189,16 +206,19 @@ export function RiskBoardMap({ showRiskLayer = true, onTerritorySelect }: RiskBo
         const territoryId = SVG_ID_TO_TERRITORY[svgId];
         const territory = territoryId ? TERRITORIES.find(t => t.id === territoryId) : null;
         const isSelected = selectedSvgId === svgId;
+        const isHighlighted = territoryId ? (highlightedIds?.has(territoryId) ?? false) : false;
+        const isSelectable = !selectableIds || (territoryId ? selectableIds.has(territoryId) : false);
 
-        const fill = showRiskLayer && territory
-          ? colors[territory.colorToken]
-          : colors.surface;
+        // Priority: game override → theme color → surface
+        const fill = (territoryFills && territoryId && territoryFills[territoryId])
+          ?? (showRiskLayer && territory ? colors[territory.colorToken] : colors.surface);
 
-        const stroke = isSelected
+        const stroke = (isSelected || isHighlighted)
           ? colors.territorySelectedBorder
           : colors.territoryBorder;
 
         const pos = LABEL_POS[svgId];
+        const armyCount = armyCounts && territoryId ? armyCounts[territoryId] : undefined;
 
         return (
           <TerritoryShape
@@ -207,13 +227,15 @@ export function RiskBoardMap({ showRiskLayer = true, onTerritorySelect }: RiskBo
             d={d}
             fill={fill}
             stroke={stroke}
-            isSelected={isSelected}
+            isSelected={isSelected || isHighlighted}
+            isSelectable={isSelectable}
             onPress={handlePress}
             showLabel={showRiskLayer}
             labelPos={pos}
             labelText={label(svgId)}
             textColor={colors.text}
             bgColor={colors.background}
+            armyCount={armyCount}
           />
         );
       })}
@@ -230,24 +252,28 @@ interface TerritoryShapeProps {
   fill: string;
   stroke: string;
   isSelected: boolean;
+  isSelectable: boolean;
   onPress: (id: string) => void;
   showLabel: boolean;
   labelPos: { x: number; y: number } | undefined;
   labelText: string;
   textColor: string;
   bgColor: string;
+  armyCount?: number;
 }
 
 function TerritoryShape({
-  svgId, d, fill, stroke, isSelected, onPress,
-  showLabel, labelPos, labelText, textColor, bgColor,
+  svgId, d, fill, stroke, isSelected, isSelectable, onPress,
+  showLabel, labelPos, labelText, textColor, bgColor, armyCount,
 }: TerritoryShapeProps) {
   const animatedProps = useAnimatedProps(() => ({
     strokeWidth: withSpring(isSelected ? 2 : 0.8, { damping: 15, stiffness: 200 }),
   }));
 
+  const opacity = isSelectable ? (isSelected ? 0.88 : 1) : 0.35;
+
   return (
-    <G onPress={() => onPress(svgId)} opacity={isSelected ? 0.88 : 1}>
+    <G onPress={() => onPress(svgId)} opacity={opacity}>
       <AnimatedPath d={d} fill={fill} stroke={stroke} animatedProps={animatedProps} />
       {showLabel && labelPos && (
         <>
@@ -268,6 +294,26 @@ function TerritoryShape({
             pointerEvents="none"
           >
             {labelText}
+          </SvgText>
+        </>
+      )}
+      {/* Army count badge — positioned below the label */}
+      {armyCount !== undefined && labelPos && (
+        <>
+          <Circle
+            cx={labelPos.x} cy={labelPos.y + 8}
+            r={5.5}
+            fill="white" opacity={0.92}
+            pointerEvents="none"
+          />
+          <SvgText
+            x={labelPos.x} y={labelPos.y + 8}
+            textAnchor="middle" alignmentBaseline="middle"
+            fontSize={5.5} fontWeight="bold"
+            fill="#000"
+            pointerEvents="none"
+          >
+            {armyCount}
           </SvgText>
         </>
       )}

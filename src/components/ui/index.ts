@@ -9,3 +9,5 @@ export { Input } from './Input';
 export { AnimatedCard } from './AnimatedCard';
 export { PressableScale } from './PressableScale';
 export { Modal } from './Modal';
+export { Slider } from './Slider';
+export type { SliderProps } from './Slider';

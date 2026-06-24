@@ -72,6 +72,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="game"
+        options={{
+          title: t('game.tabLabel'),
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="game-controller-outline" color={color} size={size} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

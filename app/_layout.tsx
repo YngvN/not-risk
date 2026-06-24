@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from '../src/context/ThemeContext';
 import { LanguageProvider } from '../src/context/LanguageContext';
+import { GameProvider } from '../src/context/GameContext';
 
 /**
  * Root layout.
@@ -19,12 +20,14 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <LanguageProvider>
+          <GameProvider>
           <Stack
             screenOptions={{
               headerShown: false,
               animation: Platform.select({ web: 'fade', default: 'ios' }),
             }}
           />
+          </GameProvider>
         </LanguageProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

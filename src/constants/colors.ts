@@ -38,6 +38,14 @@ export const Colors = {
     continentAfrica: '#8B6914',
     continentAsia: '#27AE60',
     continentAustralia: '#8E44AD',
+    // Player identity colors — same in both themes (player red is always red)
+    playerRed: '#E74C3C',
+    playerBlue: '#2980B9',
+    playerGreen: '#27AE60',
+    playerYellow: '#F1C40F',
+    playerBlack: '#2C3E50',
+    playerPink: '#E91E8C',
+    territoryNeutral: '#9E9E9E',
   },
   dark: {
     background: '#000000',
@@ -74,6 +82,13 @@ export const Colors = {
     continentAfrica: '#5A4010',
     continentAsia: '#155A34',
     continentAustralia: '#5A2870',
+    playerRed: '#E74C3C',
+    playerBlue: '#2980B9',
+    playerGreen: '#27AE60',
+    playerYellow: '#F1C40F',
+    playerBlack: '#2C3E50',
+    playerPink: '#E91E8C',
+    territoryNeutral: '#757575',
   },
 } as const;
 
