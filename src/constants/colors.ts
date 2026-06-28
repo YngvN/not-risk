@@ -46,6 +46,8 @@ export const Colors = {
     playerBlack: '#2C3E50',
     playerPink: '#E91E8C',
     territoryNeutral: '#9E9E9E',
+    ocean1: '#90C8E8',
+    ocean2: '#3A82B5',
   },
   dark: {
     background: '#000000',
@@ -89,6 +91,8 @@ export const Colors = {
     playerBlack: '#2C3E50',
     playerPink: '#E91E8C',
     territoryNeutral: '#757575',
+    ocean1: '#0A2A4A',
+    ocean2: '#061520',
   },
 } as const;
 

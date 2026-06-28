@@ -161,6 +161,17 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
     const canUndo = state.rules.allowReinforceUndo &&
       state.reinforceSnapshot !== null &&
       state.reinforcementsRemaining < state.reinforceSnapshot.total;
+
+    // All armies placed — modal takes over; show minimal panel so player bar stays visible
+    if (canEnd && !state.mustTradeCards && !state.pendingTerritoryBonus) {
+      return (
+        <Panel playerColor={playerColor} playerName={name}>
+          <Text variant="caption" style={{ color: colors.textSecondary }}>
+            {t('game.allArmiesPlaced')}
+          </Text>
+        </Panel>
+      );
+    }
     return (
       <Panel playerColor={playerColor} playerName={name}>
         <View style={styles.labelRow}>

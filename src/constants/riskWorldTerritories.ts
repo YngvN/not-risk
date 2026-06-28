@@ -154,7 +154,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'territoryBrazil',
     svgIds: ['BR'],
     labelPosition: { x: 1887, y: 601 },
-    adjacentTo: ['venezuela', 'peru', 'argentina'],
+    adjacentTo: ['venezuela', 'peru', 'argentina', 'northAfrica'],
   },
   {
     id: 'argentina',
@@ -174,7 +174,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentEurope',
     svgIds: ['IS'],
     labelPosition: { x: 261, y: 94 },
-    adjacentTo: ['greenland', 'greatBritain', 'northernEurope'],
+    adjacentTo: ['greenland', 'greatBritain', 'scandinavia'],
   },
   {
     id: 'greatBritain',
@@ -183,7 +183,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentEurope',
     svgIds: ['GB', 'IE'],
     labelPosition: { x: 238, y: 158 },
-    adjacentTo: ['iceland', 'westernEurope', 'northernEurope'],
+    adjacentTo: ['iceland', 'westernEurope', 'northernEurope', 'scandinavia'],
   },
   {
     id: 'northernEurope',
@@ -192,7 +192,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentEurope',
     svgIds: ['NO', 'SE', 'FI', 'EE', 'LV', 'LT', 'DE', 'PL', 'DK'],
     labelPosition: { x: 370, y: 148 },
-    adjacentTo: ['iceland', 'greatBritain', 'westernEurope', 'scandinavia', 'ukraine', 'southernEurope'],
+    adjacentTo: ['greatBritain', 'westernEurope', 'scandinavia', 'ukraine', 'southernEurope'],
   },
   {
     id: 'scandinavia',
@@ -204,7 +204,7 @@ export const TERRITORIES: Territory[] = [
     // this territory polygon represents the distinct Risk board slot
     polygonPoints: '380,48 490,48 490,125 380,125',
     labelPosition: { x: 435, y: 87 },
-    adjacentTo: ['northernEurope', 'iceland'],
+    adjacentTo: ['northernEurope', 'iceland', 'greatBritain', 'ukraine'],
   },
   {
     id: 'westernEurope',
@@ -231,7 +231,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentEurope',
     svgIds: ['UA', 'BY', 'MD'],
     labelPosition: { x: 398, y: 178 },
-    adjacentTo: ['northernEurope', 'southernEurope', 'ural', 'middleEast', 'afghanistan'],
+    adjacentTo: ['northernEurope', 'southernEurope', 'ural', 'middleEast', 'afghanistan', 'scandinavia'],
   },
 
   // ── AFRICA ─────────────────────────────────────────────────────────────────
@@ -242,7 +242,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentAfrica',
     svgIds: ['MA', 'DZ', 'TN', 'LY', 'MR', 'ML', 'NE', 'TD', 'EH', 'SN', 'GN', 'GW', 'GM', 'SL', 'LR', 'CI', 'BF', 'GH', 'TG', 'BJ', 'NG'],
     labelPosition: { x: 175, y: 370 },
-    adjacentTo: ['westernEurope', 'southernEurope', 'egypt', 'congo', 'eastAfrica'],
+    adjacentTo: ['westernEurope', 'southernEurope', 'egypt', 'congo', 'eastAfrica', 'brazil'],
   },
   {
     id: 'egypt',
@@ -269,7 +269,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentAfrica',
     svgIds: ['CF', 'CM', 'GA', 'GQ', 'CG', 'CD'],
     labelPosition: { x: 250, y: 510 },
-    adjacentTo: ['northAfrica', 'egypt', 'eastAfrica', 'southAfrica'],
+    adjacentTo: ['northAfrica', 'eastAfrica', 'southAfrica'],
   },
   {
     id: 'southAfrica',
@@ -300,7 +300,7 @@ export const TERRITORIES: Territory[] = [
     // Western Russia (50-70°N, 50-65°E)
     polygonPoints: '492,48 564,48 564,192 492,192',
     labelPosition: { x: 528, y: 120 },
-    adjacentTo: ['ukraine', 'afghanistan', 'siberia', 'northernEurope'],
+    adjacentTo: ['ukraine', 'afghanistan', 'siberia', 'china'],
   },
   {
     id: 'siberia',
@@ -311,7 +311,7 @@ export const TERRITORIES: Territory[] = [
     // Central Russia (50-70°N, 65-110°E)
     polygonPoints: '564,48 780,48 780,192 564,192',
     labelPosition: { x: 672, y: 120 },
-    adjacentTo: ['ural', 'irkutsk', 'yakutsk', 'mongolia', 'afghanistan'],
+    adjacentTo: ['ural', 'irkutsk', 'yakutsk', 'mongolia', 'china'],
   },
   {
     id: 'yakutsk',
@@ -333,7 +333,7 @@ export const TERRITORIES: Territory[] = [
     // Southern central-eastern Russia (48-62°N, 110-130°E)
     polygonPoints: '780,113 876,113 876,192 780,192',
     labelPosition: { x: 828, y: 152 },
-    adjacentTo: ['siberia', 'yakutsk', 'kamchatka', 'mongolia', 'china'],
+    adjacentTo: ['siberia', 'yakutsk', 'kamchatka', 'mongolia'],
   },
   {
     id: 'kamchatka',
@@ -353,7 +353,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentAsia',
     svgIds: ['MN', 'KZ'],
     labelPosition: { x: 670, y: 200 },
-    adjacentTo: ['siberia', 'irkutsk', 'china', 'afghanistan'],
+    adjacentTo: ['siberia', 'irkutsk', 'china', 'japan'],
   },
   {
     id: 'japan',
@@ -362,7 +362,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentAsia',
     svgIds: ['JP', 'KR', 'TW'],
     labelPosition: { x: 927, y: 260 },
-    adjacentTo: ['kamchatka', 'mongolia', 'china'],
+    adjacentTo: ['kamchatka', 'mongolia'],
   },
   {
     id: 'afghanistan',
@@ -371,7 +371,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentAsia',
     svgIds: ['AF', 'PK', 'TM', 'UZ', 'KG', 'TJ', 'IR'],
     labelPosition: { x: 545, y: 245 },
-    adjacentTo: ['ukraine', 'ural', 'siberia', 'mongolia', 'china', 'india', 'middleEast'],
+    adjacentTo: ['ukraine', 'ural', 'china', 'india', 'middleEast'],
   },
   {
     id: 'china',
@@ -380,7 +380,7 @@ export const TERRITORIES: Territory[] = [
     colorToken: 'continentAsia',
     svgIds: ['CN'],
     labelPosition: { x: 754, y: 276 },
-    adjacentTo: ['siberia', 'irkutsk', 'mongolia', 'japan', 'afghanistan', 'india', 'siam'],
+    adjacentTo: ['siberia', 'mongolia', 'afghanistan', 'india', 'siam', 'ural'],
   },
   {
     id: 'middleEast',

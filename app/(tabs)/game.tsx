@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet, TextInput, useWindowDimensions } from 'react-native';
+import { MotiView, AnimatePresence } from 'moti';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { Screen } from '../../src/components/layout/Screen';
 import { Text } from '../../src/components/ui/Text';
 import { ZoomableMap, type ZoomableMapRef } from '../../src/components/map/ZoomableMap';
@@ -37,29 +39,92 @@ function Checkbox({ checked, onToggle, label }: { checked: boolean; onToggle: ()
 }
 
 /** Map-fill override from current game state (player colors). */
-function useTerritoryFills(st: ReturnType<typeof useGame>['state']) {
+/** Darkens a #rrggbb hex colour by multiplying each channel by `factor` (0–1). */
+/** Diagonal gradient that fills the ocean/map background area. */
+function OceanGradient() {
+  const { colors } = useTheme();
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  return (
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+      onLayout={e => {
+        const { width, height } = e.nativeEvent.layout;
+        setSize({ w: width, h: height });
+      }}
+    >
+      {size.w > 0 && (
+        <Svg width={size.w} height={size.h}>
+          <Defs>
+            <LinearGradient id="bg-ocean" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor={colors.ocean1} />
+              <Stop offset="100%" stopColor={colors.ocean2} />
+            </LinearGradient>
+          </Defs>
+          <Rect width={size.w} height={size.h} fill="url(#bg-ocean)" />
+        </Svg>
+      )}
+    </View>
+  );
+}
+
+function darkenHex(hex: string, factor: number): string {
+  const r = Math.round(parseInt(hex.slice(1, 3), 16) * factor);
+  const g = Math.round(parseInt(hex.slice(3, 5), 16) * factor);
+  const b = Math.round(parseInt(hex.slice(5, 7), 16) * factor);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+function useTerritoryFills(
+  st: ReturnType<typeof useGame>['state'],
+  dimmedIds?: ReadonlySet<string>,
+) {
   const { colors } = useTheme();
   return useMemo(() => {
     if (!st) return {};
     const fills: Record<string, string> = {};
     for (const ts of Object.values(st.territories)) {
-      fills[ts.id] = ts.owner
+      const base = ts.owner
         ? PLAYER_COLOR_HEX[st.players.find(p => p.id === ts.owner)!.color]
         : colors.territoryNeutral;
+      fills[ts.id] = dimmedIds?.has(ts.id) ? darkenHex(base, 0.45) : base;
     }
     return fills;
-  }, [st?.territories, st?.players, colors.territoryNeutral]);
+  }, [st?.territories, st?.players, colors.territoryNeutral, dimmedIds]);
 }
 
+/**
+ * During REINFORCE, shows the snapshot (pre-placement) army count so the
+ * "+N" delta badge stays accurate. Outside reinforce, shows the live total.
+ */
 function useArmyCounts(st: ReturnType<typeof useGame>['state']) {
   return useMemo(() => {
     if (!st) return {};
     const counts: Record<string, number> = {};
     for (const ts of Object.values(st.territories)) {
-      if (ts.armies > 0) counts[ts.id] = ts.armies;
+      const display =
+        st.phase === 'REINFORCE' && st.reinforceSnapshot
+          ? (st.reinforceSnapshot.territories[ts.id]?.armies ?? ts.armies)
+          : ts.armies;
+      if (display > 0) counts[ts.id] = display;
     }
     return counts;
-  }, [st?.territories]);
+  }, [st?.territories, st?.reinforceSnapshot, st?.phase]);
+}
+
+/** Delta armies placed this turn (territory id → count). Only non-null during REINFORCE. */
+function useArmyDeltas(st: ReturnType<typeof useGame>['state']) {
+  return useMemo(() => {
+    if (!st || st.phase !== 'REINFORCE' || !st.reinforceSnapshot) return undefined;
+    const deltas: Record<string, number> = {};
+    for (const ts of Object.values(st.territories)) {
+      const snap = st.reinforceSnapshot.territories[ts.id]?.armies ?? 0;
+      const delta = ts.armies - snap;
+      if (delta > 0) deltas[ts.id] = delta;
+    }
+    return Object.keys(deltas).length > 0 ? deltas : undefined;
+  }, [st?.territories, st?.reinforceSnapshot, st?.phase]);
 }
 
 // ── Setup screen ─────────────────────────────────────────────────────────────
@@ -308,6 +373,8 @@ function PlayScreen() {
   const [logOpen, setLogOpen] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [logHighlightedIds, setLogHighlightedIds] = useState<Set<string>>(new Set());
+  const [showReinforceDoneModal, setShowReinforceDoneModal] = useState(false);
+  const [lastClaimedId, setLastClaimedId] = useState<TerritoryId | null>(null);
   const prevActivePlayer = useRef<string | null>(null);
   const zoomMapRef = useRef<ZoomableMapRef>(null);
 
@@ -364,9 +431,30 @@ function PlayScreen() {
     if (st.phase !== 'ATTACK') zoomMapRef.current?.resetZoom();
   }, [st.phase]);
 
+  // Clear the claimed-territory highlight when leaving the CLAIMING sub-phase
+  React.useEffect(() => {
+    if (st.phase !== 'SETUP' || st.setupSubPhase !== 'CLAIMING') {
+      setLastClaimedId(null);
+    }
+  }, [st.phase, st.setupSubPhase]);
+
   React.useEffect(() => {
     if (state?.lastBattleResult) setShowDice(true);
   }, [state?.lastBattleResult]);
+
+  // Auto-show confirmation modal when all reinforcements are placed
+  React.useEffect(() => {
+    if (
+      st.phase === 'REINFORCE' &&
+      st.reinforcementsRemaining === 0 &&
+      !st.mustTradeCards &&
+      !st.pendingTerritoryBonus
+    ) {
+      setShowReinforceDoneModal(true);
+    } else {
+      setShowReinforceDoneModal(false);
+    }
+  }, [st.phase, st.reinforcementsRemaining, st.mustTradeCards, st.pendingTerritoryBonus]);
 
   // Show pass-device screen when the active player changes (mission mode only)
   React.useEffect(() => {
@@ -379,8 +467,24 @@ function PlayScreen() {
     prevActivePlayer.current = activePlayerId;
   }, [activePlayerId, st.phase]);
 
-  const territoryFills = useTerritoryFills(st);
+  // Friendly territories to visually darken during ATTACK_FROM so they don't
+  // look like valid attack targets compared to enemy territories.
+  const dimmedTerritoryIds = useMemo<ReadonlySet<string> | undefined>(() => {
+    if (st.phase !== 'ATTACK') return undefined;
+    const attackerFrom = selection.phase === 'ATTACK_FROM' || selection.phase === 'ATTACK_TO'
+      ? (selection as { from: TerritoryId }).from
+      : undefined;
+    if (!attackerFrom) return undefined;
+    const s = new Set<string>();
+    for (const ts of Object.values(st.territories)) {
+      if (ts.owner === activePlayerId && ts.id !== attackerFrom) s.add(ts.id);
+    }
+    return s;
+  }, [st.phase, st.territories, selection, activePlayerId]);
+
+  const territoryFills = useTerritoryFills(st, dimmedTerritoryIds);
   const armyCounts = useArmyCounts(st);
+  const armyDeltas = useArmyDeltas(st);
 
   // HQ highlights for capital mode
   const hqHighlights = useMemo(() => {
@@ -392,9 +496,18 @@ function PlayScreen() {
     return s;
   }, [st.mode, st.hqsRevealed, st.players]);
 
+  // forceLiftedIds: territories that keep the hover lift even when non-selectable
+  const forceLiftedIds = useMemo(() => {
+    if (!lastClaimedId) return undefined;
+    return new Set([lastClaimedId as string]);
+  }, [lastClaimedId]);
+
   const { selectableIds, highlightedIds } = useMemo(() => {
     const selectable = new Set<string>();
     const highlighted = new Set<string>(hqHighlights);
+
+    // Keep the last claimed territory gold-bordered during CLAIMING
+    if (lastClaimedId) highlighted.add(lastClaimedId);
 
     if (st.phase === 'SETUP') {
       if (st.setupSubPhase === 'CLAIMING') {
@@ -407,12 +520,21 @@ function PlayScreen() {
     } else if (st.phase === 'ATTACK') {
       if (!st.captureContext) {
         if (selection.phase === 'ATTACK_FROM') {
+          // Attacker gets gold border; enemy targets are selectable but NOT highlighted —
+          // the darkened-friendly contrast already shows which territories can be attacked.
           highlighted.add(selection.from);
           for (const adjId of (TERRITORIES.find(t => t.id === selection.from)?.adjacentTo ?? [])) {
             const adjT = st.territories[adjId as TerritoryId];
-            if (adjT?.owner && adjT.owner !== activePlayerId) { selectable.add(adjId); highlighted.add(adjId); }
+            if (adjT?.owner && adjT.owner !== activePlayerId) selectable.add(adjId);
           }
           for (const ts of Object.values(st.territories)) { if (ts.owner === activePlayerId && ts.armies >= 2) selectable.add(ts.id); }
+        } else if (selection.phase === 'ATTACK_TO') {
+          // Both attacker and target get gold borders.
+          // Attacker stays selectable so it keeps its hover lift (and can be re-tapped to cancel).
+          // Target is highlighted but NOT selectable → full opacity via isSelected, no hover.
+          highlighted.add(selection.from);
+          highlighted.add(selection.to);
+          selectable.add(selection.from);
         } else {
           for (const ts of Object.values(st.territories)) { if (ts.owner === activePlayerId && ts.armies >= 2) selectable.add(ts.id); }
         }
@@ -430,6 +552,13 @@ function PlayScreen() {
     }
     return { selectableIds: selectable, highlightedIds: highlighted };
   }, [st, activePlayerId, selection, hqHighlights]);
+
+  // During ATTACK_TO: the chosen target is tappable (to deselect it) but
+  // does not enter the map's hover/lift state.
+  const tappableIds = useMemo<ReadonlySet<string> | undefined>(() => {
+    if (selection.phase !== 'ATTACK_TO') return undefined;
+    return new Set([selection.to as string]);
+  }, [selection]);
 
   // Derive per-territory reinforcement log from snapshot diff (E0.4 / E2.3)
   const reinforcementLog = useMemo(() => {
@@ -476,8 +605,12 @@ function PlayScreen() {
     const ts = st.territories[id];
 
     if (st.phase === 'SETUP') {
-      if (st.setupSubPhase === 'CLAIMING') dispatch({ type: 'CLAIM_TERRITORY', territoryId: id });
-      else dispatch({ type: 'PLACE_SETUP_ARMY', territoryId: id });
+      if (st.setupSubPhase === 'CLAIMING') {
+        dispatch({ type: 'CLAIM_TERRITORY', territoryId: id });
+        setLastClaimedId(id); // keep the just-claimed territory lifted until next claim
+      } else {
+        dispatch({ type: 'PLACE_SETUP_ARMY', territoryId: id });
+      }
       return;
     }
     if (st.phase === 'REINFORCE') {
@@ -490,6 +623,13 @@ function PlayScreen() {
       if (selection.phase === 'ATTACK_FROM') {
         if (ts?.owner === activePlayerId && ts.armies >= 2) setSelection({ phase: 'ATTACK_FROM', from: id });
         else if (ts?.owner && ts.owner !== activePlayerId && areAdjacent(selection.from, id)) setSelection({ phase: 'ATTACK_TO', from: selection.from, to: id });
+      } else if (selection.phase === 'ATTACK_TO') {
+        if (id === selection.to) {
+          // Tapping the chosen target again cancels the target — back to picking
+          setSelection({ phase: 'ATTACK_FROM', from: selection.from });
+        } else if (ts?.owner === activePlayerId && ts.armies >= 2) {
+          setSelection({ phase: 'ATTACK_FROM', from: id });
+        }
       } else {
         if (ts?.owner === activePlayerId && ts.armies >= 2) setSelection({ phase: 'ATTACK_FROM', from: id });
       }
@@ -547,14 +687,19 @@ function PlayScreen() {
 
       {/* Map + optional wide-screen log sidebar */}
       <View style={styles.mapRow}>
+        <OceanGradient />
         <ZoomableMap ref={zoomMapRef}>
           <RiskBoardMap
             showRiskLayer
             onTerritorySelect={handleTerritorySelect}
             territoryFills={territoryFills}
             armyCounts={armyCounts}
+            armyDeltas={armyDeltas}
             highlightedIds={allHighlightedIds}
             selectableIds={selectableIds}
+            tappableIds={tappableIds}
+            restoreSelectionId={selection.phase === 'ATTACK_TO' ? selection.from : undefined}
+            forceLiftedIds={forceLiftedIds}
           />
         </ZoomableMap>
 
@@ -602,6 +747,54 @@ function PlayScreen() {
         player={activePlayer}
         onUnlock={() => setPassDeviceVisible(false)}
       />
+
+      {/* Reinforce-done confirmation modal */}
+      <AnimatePresence>
+        {showReinforceDoneModal && (
+          <MotiView
+            from={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={[styles.modalBackdrop]}
+          >
+            <MotiView
+              from={{ translateY: 80, opacity: 0 }}
+              animate={{ translateY: 0, opacity: 1 }}
+              exit={{ translateY: 80, opacity: 0 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 220 }}
+              style={[styles.modalSheet, { backgroundColor: colors.card, borderColor: colors.border }]}
+            >
+              <View style={[styles.modalColorBar, { backgroundColor: PLAYER_COLOR_HEX[activePlayer.color] }]} />
+              <View style={styles.modalBody}>
+                <Text variant="h3" style={{ color: colors.text }}>
+                  {t('game.allArmiesPlaced')}
+                </Text>
+                <Text variant="caption" style={{ color: colors.textSecondary }}>
+                  {activePlayer.name}
+                </Text>
+                <View style={styles.modalRow}>
+                  <Pressable
+                    onPress={() => dispatch({ type: 'UNDO_REINFORCE' })}
+                    style={[styles.modalBtn, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                  >
+                    <Text variant="body" style={{ color: colors.text, fontWeight: '700', textAlign: 'center' }}>
+                      {t('game.undoReinforce')}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => dispatch({ type: 'END_REINFORCE' })}
+                    style={[styles.modalBtn, { backgroundColor: colors.primary }]}
+                  >
+                    <Text variant="body" style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
+                      {t('game.endReinforce')}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </MotiView>
+          </MotiView>
+        )}
+      </AnimatePresence>
     </View>
   );
 }
@@ -642,4 +835,10 @@ const styles = StyleSheet.create({
   hqHeader:      { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, borderBottomWidth: 1 },
   colorDot:      { width: 16, height: 16, borderRadius: 8 },
   hqPanel:       { borderTopWidth: 1, padding: Spacing.md, gap: Spacing.sm },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 200 },
+  modalSheet:    { borderTopLeftRadius: BorderRadius.lg, borderTopRightRadius: BorderRadius.lg, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, overflow: 'hidden' },
+  modalColorBar: { height: 4 },
+  modalBody:     { padding: Spacing.lg, gap: Spacing.md },
+  modalRow:      { flexDirection: 'row', gap: Spacing.sm },
+  modalBtn:      { flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, alignItems: 'center' },
 });
