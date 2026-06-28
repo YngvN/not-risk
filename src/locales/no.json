@@ -139,7 +139,12 @@
     "confirmHQ": "Bekreft HK",
     "allHQsChosen": "Alle hovedkvarterer valgt!",
     "allHQsChosenSub": "Send enheten tilbake så alle kan se avsløringen.",
-    "revealHQs": "Avslør alle HK-er"
+    "revealHQs": "Avslør alle HK-er",
+    "rulesLabel": "Regler",
+    "ruleUndoReinforce": "Tillat angre under forsterkning",
+    "ruleFortifyChain": "Forsvar via tilkoblet kjede (fjern hake = bare tilstøtende)",
+    "ruleMissionOwnTurn": "Hemmelig oppdrag: vinn på din tur (fjern hake = vinn umiddelbart)",
+    "undoReinforce": "Angre plassering"
   },
   "world": {
     "title": "Verden",

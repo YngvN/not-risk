@@ -12,7 +12,8 @@ import { useGame, PLAYER_COLOR_HEX } from '../../src/context/GameContext';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useLanguage } from '../../src/hooks/useLanguage';
 import { Spacing, BorderRadius } from '../../src/constants/spacing';
-import type { PlayerColor, TerritoryId, GameMode } from '../../src/engine/types';
+import type { PlayerColor, TerritoryId, GameMode, GameRules } from '../../src/engine/types';
+import { DEFAULT_RULES } from '../../src/engine/types';
 import { TERRITORIES, type Territory } from '../../src/constants/riskWorldTerritories';
 import { areAdjacent, getConnectedOwned } from '../../src/engine/board';
 import type { PlayerConfig, SetupMode } from '../../src/engine/setup';
@@ -73,13 +74,17 @@ function SetupScreen() {
   const [gameMode, setGameMode] = useState<GameMode>('classic');
   const [randomDeal, setRandomDeal] = useState(false);
   const [randomPlacement, setRandomPlacement] = useState(false);
+  const [rules, setRules] = useState<GameRules>(DEFAULT_RULES);
+
+  const toggleRule = <K extends keyof GameRules>(key: K, value: GameRules[K]) =>
+    setRules(r => ({ ...r, [key]: value }));
 
   const handleStart = () => {
     const configs: PlayerConfig[] = Array.from({ length: playerCount }, (_, i) => ({
       name: names[i] || `Player ${i + 1}`,
       color: selectedColors[i],
     }));
-    startGame(configs, gameMode, randomDeal ? 'random' : 'claim', randomPlacement);
+    startGame(configs, gameMode, randomDeal ? 'random' : 'claim', randomPlacement, rules);
   };
 
   const pickColor = (playerIdx: number, color: PlayerColor) => {
@@ -131,6 +136,14 @@ function SetupScreen() {
       <View style={{ marginBottom: Spacing.lg, gap: Spacing.sm }}>
         <Checkbox checked={randomDeal} onToggle={() => setRandomDeal(v => !v)} label={t('game.setupModeRandom')} />
         <Checkbox checked={randomPlacement} onToggle={() => setRandomPlacement(v => !v)} label={t('game.setupModeRandomPlacement')} />
+      </View>
+
+      {/* Rules */}
+      <Text variant="body" style={{ color: colors.textSecondary, marginBottom: Spacing.xs }}>{t('game.rulesLabel')}</Text>
+      <View style={{ marginBottom: Spacing.lg, gap: Spacing.sm }}>
+        <Checkbox checked={rules.allowReinforceUndo} onToggle={() => toggleRule('allowReinforceUndo', !rules.allowReinforceUndo)} label={t('game.ruleUndoReinforce')} />
+        <Checkbox checked={rules.fortifyMode === 'chain'} onToggle={() => toggleRule('fortifyMode', rules.fortifyMode === 'chain' ? 'adjacent' : 'chain')} label={t('game.ruleFortifyChain')} />
+        <Checkbox checked={rules.missionWinTiming === 'own_turn'} onToggle={() => toggleRule('missionWinTiming', rules.missionWinTiming === 'own_turn' ? 'immediate' : 'own_turn')} label={t('game.ruleMissionOwnTurn')} />
       </View>
 
       {/* Per-player config */}

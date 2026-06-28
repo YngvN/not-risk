@@ -26,9 +26,7 @@ export type MissionType =
 export interface MissionCard {
   id: string;
   type: MissionType;
-  /** Named continents for conquest missions. */
   continents?: [ContinentId, ContinentId];
-  /** Target player color for DESTROY_PLAYER missions. */
   targetColor?: PlayerColor;
 }
 
@@ -37,8 +35,55 @@ export interface MissionCard {
 export interface RiskCard {
   id: string;
   symbol: CardSymbol;
-  /** null for wild cards */
   territoryId: TerritoryId | null;
+}
+
+// ── Rules config (E9.5) ───────────────────────────────────────────────────────
+
+export interface GameRules {
+  /** How far armies can move during fortify (E4.1). */
+  fortifyMode: 'chain' | 'adjacent';
+  /**
+   * When secret-mission "destroy a player" wins are evaluated (E7.3).
+   * 'own_turn': win declared at the start of the holder's next turn (default).
+   * 'immediate': win triggers the moment the target is eliminated.
+   */
+  missionWinTiming: 'own_turn' | 'immediate';
+  /** Whether armies placed during REINFORCE can be undone before ending the phase (E2.3). */
+  allowReinforceUndo: boolean;
+}
+
+export const DEFAULT_RULES: GameRules = {
+  fortifyMode: 'chain',
+  missionWinTiming: 'own_turn',
+  allowReinforceUndo: true,
+};
+
+// ── Event log (E0.4) ─────────────────────────────────────────────────────────
+
+export type GameEventType =
+  | 'TERRITORY_CLAIMED'
+  | 'ARMY_PLACED'
+  | 'CARDS_TRADED'
+  | 'TERRITORY_BONUS_CLAIMED'
+  | 'ATTACK_RESOLVED'
+  | 'TERRITORY_CAPTURED'
+  | 'PLAYER_ELIMINATED'
+  | 'CARD_DRAWN'
+  | 'ARMIES_FORTIFIED'
+  | 'HQ_CAPTURED'
+  | 'MISSION_COMPLETED'
+  | 'TURN_ENDED'
+  | 'GAME_OVER';
+
+export interface GameEvent {
+  id: string;
+  /** Unix ms timestamp. */
+  ts: number;
+  type: GameEventType;
+  /** Player who triggered the event; null for system events. */
+  actorId: PlayerId | null;
+  payload: Record<string, unknown>;
 }
 
 // ── Core entities ─────────────────────────────────────────────────────────────
@@ -55,17 +100,12 @@ export interface Player {
   color: PlayerColor;
   alive: boolean;
   hand: RiskCard[];
-  // Mode 2 — Secret Mission
   mission: MissionCard | null;
-  // Mode 3 — Capital Risk
   hqTerritoryId: TerritoryId | null;
-  /** True once player has submitted their HQ choice (hidden until reveal). */
   hqChosen: boolean;
-  /** IDs of players whose HQ this player has captured. */
   capturedHqPlayerIds: PlayerId[];
 }
 
-/** Context kept while a territory capture is awaiting the player's army-movement choice. */
 export interface CaptureContext {
   from: TerritoryId;
   to: TerritoryId;
@@ -79,10 +119,13 @@ export interface BattleResult {
   attackerLosses: number;
   defenderLosses: number;
   captured: boolean;
+  /** Seed used to produce this roll — enables deterministic replay (E9.4). */
+  seed?: number;
 }
 
 export interface GameState {
   mode: GameMode;
+  rules: GameRules;
   phase: Phase;
   setupSubPhase: SetupSubPhase;
   players: Player[];
@@ -94,14 +137,18 @@ export interface GameState {
   capturedThisTurn: boolean;
   setupArmiesRemaining: Record<PlayerId, number>;
   reinforcementsRemaining: number;
+  /** Snapshot taken at the start of REINFORCE; used for undo (E2.3). */
+  reinforceSnapshot: { territories: Record<TerritoryId, TerritoryState>; total: number } | null;
   captureContext: CaptureContext | null;
   lastBattleResult: BattleResult | null;
   mustTradeCards: boolean;
   pendingTerritoryBonus: TerritoryId[] | null;
   randomPlacement: boolean;
-  // Mode 3 — Capital Risk
-  /** True after all players have revealed their HQ simultaneously. */
   hqsRevealed: boolean;
+  /** Current PRNG seed — advances with every dice roll (E9.4). */
+  rngSeed: number;
+  /** Append-only event log (E0.4). */
+  eventLog: GameEvent[];
   winner: PlayerId | null;
 }
 
@@ -111,12 +158,12 @@ export type GameAction =
   | { type: 'TRADE_IN_CARDS'; cardIds: [string, string, string] }
   | { type: 'CLAIM_TERRITORY_BONUS'; territoryId: TerritoryId }
   | { type: 'REINFORCE'; territoryId: TerritoryId; count: number }
+  | { type: 'UNDO_REINFORCE' }
   | { type: 'END_REINFORCE' }
   | { type: 'ATTACK'; from: TerritoryId; to: TerritoryId; attackerDice: number }
   | { type: 'OCCUPY'; armies: number }
   | { type: 'END_ATTACK' }
   | { type: 'FORTIFY'; from: TerritoryId; to: TerritoryId; armies: number }
   | { type: 'END_FORTIFY' }
-  // Mode 3 — Capital Risk
   | { type: 'SELECT_HQ'; territoryId: TerritoryId }
   | { type: 'REVEAL_HQS' };

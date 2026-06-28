@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { GameState, GameAction, PlayerColor, GameMode } from '../engine/types';
+import type { GameState, GameAction, PlayerColor, GameMode, GameRules } from '../engine/types';
+import { DEFAULT_RULES } from '../engine/types';
 import { createGame, type PlayerConfig, type SetupMode } from '../engine/setup';
 import { dispatch as engineDispatch } from '../engine/stateMachine';
 import { Colors } from '../constants/colors';
@@ -20,7 +21,7 @@ interface GameContextValue {
   state: GameState | null;
   hasSavedGame: boolean;
   dispatch: (action: GameAction) => void;
-  startGame: (playerConfigs: PlayerConfig[], mode?: GameMode, setupMode?: SetupMode, randomPlacement?: boolean) => void;
+  startGame: (playerConfigs: PlayerConfig[], mode?: GameMode, setupMode?: SetupMode, randomPlacement?: boolean, rules?: GameRules) => void;
   resetGame: () => void;
   resumeGame: () => Promise<void>;
 }
@@ -31,14 +32,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState | null>(null);
   const [hasSavedGame, setHasSavedGame] = useState(false);
 
-  // Check for a saved game on mount
   useEffect(() => {
-    AsyncStorage.getItem(SAVE_KEY).then(raw => {
-      setHasSavedGame(raw !== null);
-    });
+    AsyncStorage.getItem(SAVE_KEY).then(raw => setHasSavedGame(raw !== null));
   }, []);
 
-  // Auto-save whenever state changes
   useEffect(() => {
     if (state) {
       AsyncStorage.setItem(SAVE_KEY, JSON.stringify(state));
@@ -55,8 +52,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     mode: GameMode = 'classic',
     setupMode: SetupMode = 'claim',
     randomPlacement = false,
+    rules: GameRules = DEFAULT_RULES,
   ) => {
-    setState(createGame(mode, playerConfigs, setupMode, randomPlacement));
+    setState(createGame(mode, playerConfigs, setupMode, randomPlacement, rules));
   }, []);
 
   const resetGame = useCallback(() => {

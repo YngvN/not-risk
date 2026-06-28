@@ -1,11 +1,6 @@
 import type { BattleResult } from './types';
+import { rollWithSeed } from './rng';
 
-function rollDice(count: number): number[] {
-  return Array.from({ length: count }, () => Math.floor(Math.random() * 6) + 1)
-    .sort((a, b) => b - a);
-}
-
-/** Compare sorted dice pairs; defender wins ties. Returns army losses. */
 function resolvePairs(
   attackerDice: number[],
   defenderDice: number[],
@@ -21,12 +16,20 @@ function resolvePairs(
 }
 
 /**
- * Rolls dice for both sides and returns the full battle result.
- * `captured` is set by the caller based on remaining defender armies.
+ * Resolves one round of combat using the seeded PRNG (E9.4).
+ * Returns the battle result and the advanced seed so the caller can
+ * persist it in game state — enabling deterministic replay.
  */
-export function battle(attackerDiceCount: number, defenderDiceCount: number): BattleResult {
-  const attackerDice = rollDice(attackerDiceCount);
-  const defenderDice = rollDice(defenderDiceCount);
+export function battle(
+  attackerDiceCount: number,
+  defenderDiceCount: number,
+  seed: number,
+): { result: BattleResult; nextSeed: number } {
+  const { dice: attackerDice, nextSeed: s1 } = rollWithSeed(attackerDiceCount, seed);
+  const { dice: defenderDice, nextSeed: s2 } = rollWithSeed(defenderDiceCount, s1);
   const { attackerLosses, defenderLosses } = resolvePairs(attackerDice, defenderDice);
-  return { attackerDice, defenderDice, attackerLosses, defenderLosses, captured: false };
+  return {
+    result: { attackerDice, defenderDice, attackerLosses, defenderLosses, captured: false },
+    nextSeed: s2,
+  };
 }

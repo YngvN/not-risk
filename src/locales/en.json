@@ -139,7 +139,12 @@
     "confirmHQ": "Confirm HQ",
     "allHQsChosen": "All Headquarters chosen!",
     "allHQsChosenSub": "Pass the device back so everyone can see the reveal.",
-    "revealHQs": "Reveal all HQs"
+    "revealHQs": "Reveal all HQs",
+    "rulesLabel": "Rules",
+    "ruleUndoReinforce": "Allow undo during reinforcement",
+    "ruleFortifyChain": "Fortify via connected chain (uncheck = adjacent only)",
+    "ruleMissionOwnTurn": "Secret mission: win on your own turn (uncheck = win immediately)",
+    "undoReinforce": "Undo placement"
   },
   "world": {
     "title": "World",

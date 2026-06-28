@@ -1,14 +1,27 @@
-import type { GameState, GameAction, Player, TerritoryState, PlayerId, TerritoryId } from './types';
-import { areAdjacent, getTerritoryCount, getConnectedOwned } from './board';
+import type { GameState, GameAction, Player, TerritoryState, PlayerId, TerritoryId, GameEvent } from './types';
+import { areAdjacent, getTerritoryCount, getConnectedOwned, getAdjacentIds } from './board';
 import { battle } from './combat';
 import { drawCard, tradeInValue, isValidSet } from './cards';
 import { calcReinforcements } from './reinforcement';
 import { autoPlaceArmies } from './setup';
-import { dealMissions, checkMission } from './missions';
+import { dealMissions } from './missions';
 import { ClassicConquestVictory, SecretMissionVictory, CapitalVictory } from './victory';
 import type { VictoryCondition } from './victory';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+let _eventCounter = 0;
+function mkEvent(
+  type: GameEvent['type'],
+  actorId: PlayerId | null,
+  payload: Record<string, unknown> = {},
+): GameEvent {
+  return { id: `evt_${++_eventCounter}`, ts: Date.now(), type, actorId, payload };
+}
+
+function log(state: GameState, event: GameEvent): GameState {
+  return { ...state, eventLog: [...state.eventLog, event] };
+}
 
 function patch(
   territories: GameState['territories'],
@@ -56,34 +69,36 @@ const VICTORY: Record<GameState['mode'], VictoryCondition> = {
 
 function checkVictory(state: GameState): GameState {
   const winner = VICTORY[state.mode].check(state);
-  if (winner) return { ...state, phase: 'GAME_OVER', winner };
-  return state;
+  if (!winner) return state;
+  const s = log(state, mkEvent('GAME_OVER', winner, { winner }));
+  return { ...s, phase: 'GAME_OVER', winner };
 }
 
-/** Check destroy missions after any elimination event. */
 function checkDestroyMissions(state: GameState): GameState {
   if (state.mode !== 'mission') return state;
+  if (state.rules.missionWinTiming !== 'immediate') return state;
   const winner = MISSION_VICTORY.checkDestroyMissions(state);
-  if (winner) return { ...state, phase: 'GAME_OVER', winner };
-  return state;
+  if (!winner) return state;
+  const s = log(state, mkEvent('GAME_OVER', winner, { winner, reason: 'destroy_mission' }));
+  return { ...s, phase: 'GAME_OVER', winner };
 }
 
-/** Transition to the next player's reinforcement phase. */
 function endTurn(state: GameState): GameState {
   const next = nextAlivePlayer(state);
   const reinforcements = calcReinforcements(next.id, state);
   const nextPlayer = state.players.find(p => p.id === next.id)!;
   const mustTrade = nextPlayer.hand.length >= 5;
+  let s = log(state, mkEvent('TURN_ENDED', state.activePlayerId, { nextPlayerId: next.id }));
   const newState: GameState = {
-    ...state,
+    ...s,
     phase: 'REINFORCE',
     activePlayerId: next.id,
     reinforcementsRemaining: reinforcements,
+    reinforceSnapshot: { territories: state.territories, total: reinforcements },
     capturedThisTurn: false,
     lastBattleResult: null,
     mustTradeCards: mustTrade,
   };
-  // Check mission at the start of the player's turn (E7.4)
   return checkVictory(newState);
 }
 
@@ -106,18 +121,18 @@ export function dispatch(action: GameAction, state: GameState): GameState {
         ...state.setupArmiesRemaining,
         [state.activePlayerId]: state.setupArmiesRemaining[state.activePlayerId] - 1,
       };
+      let s = log(state, mkEvent('TERRITORY_CLAIMED', state.activePlayerId, { territoryId: action.territoryId }));
 
       const unclaimed = Object.values(territories).filter(t => t.owner === null).length;
       if (unclaimed === 0) {
         if (state.randomPlacement) {
           const placed = autoPlaceArmies(territories, state.players, setupArmiesRemaining);
-          return transitionAfterSetup({ ...state, territories: placed, setupArmiesRemaining: Object.fromEntries(state.players.map(p => [p.id, 0])) });
+          return transitionAfterSetup({ ...s, territories: placed, setupArmiesRemaining: Object.fromEntries(state.players.map(p => [p.id, 0])) });
         }
-        return { ...state, territories, setupArmiesRemaining, setupSubPhase: 'PLACING', activePlayerId: alivePlayers(state)[0].id };
+        return { ...s, territories, setupArmiesRemaining, setupSubPhase: 'PLACING', activePlayerId: alivePlayers(state)[0].id };
       }
-
-      const next = nextAlivePlayer({ ...state, territories, setupArmiesRemaining });
-      return { ...state, territories, setupArmiesRemaining, activePlayerId: next.id };
+      const next = nextAlivePlayer({ ...s, territories, setupArmiesRemaining });
+      return { ...s, territories, setupArmiesRemaining, activePlayerId: next.id };
     }
 
     // ── SETUP: PLACING ───────────────────────────────────────────────────────
@@ -135,45 +150,36 @@ export function dispatch(action: GameAction, state: GameState): GameState {
         ...state.setupArmiesRemaining,
         [state.activePlayerId]: state.setupArmiesRemaining[state.activePlayerId] - 1,
       };
+      let s = log(state, mkEvent('ARMY_PLACED', state.activePlayerId, { territoryId: action.territoryId, phase: 'SETUP' }));
 
       const nextId = nextSetupPlayer(state.activePlayerId, state.players, setupArmiesRemaining);
       if (nextId === null) {
-        return transitionAfterSetup({ ...state, territories, setupArmiesRemaining: Object.fromEntries(state.players.map(p => [p.id, 0])) });
+        return transitionAfterSetup({ ...s, territories, setupArmiesRemaining: Object.fromEntries(state.players.map(p => [p.id, 0])) });
       }
-
-      return { ...state, territories, setupArmiesRemaining, activePlayerId: nextId };
+      return { ...s, territories, setupArmiesRemaining, activePlayerId: nextId };
     }
 
     // ── CAPITAL: HQ SELECTION ────────────────────────────────────────────────
 
     case 'SELECT_HQ': {
       if (state.phase !== 'HQ_SELECTION') return state;
-      const territory = state.territories[action.territoryId];
-      if (territory.owner !== state.activePlayerId) return state;
+      if (state.territories[action.territoryId]?.owner !== state.activePlayerId) return state;
 
       const players = state.players.map(p =>
-        p.id === state.activePlayerId
-          ? { ...p, hqTerritoryId: action.territoryId, hqChosen: true }
-          : p,
+        p.id === state.activePlayerId ? { ...p, hqTerritoryId: action.territoryId, hqChosen: true } : p,
       );
-
-      // Advance to next player who hasn't chosen yet
       const nextPlayer = players.find(
         (p, i) => p.alive && !p.hqChosen && i > players.findIndex(p2 => p2.id === state.activePlayerId),
       ) ?? players.find(p => p.alive && !p.hqChosen);
 
-      if (!nextPlayer) {
-        // All have chosen — stay in HQ_SELECTION but signal ready for reveal
-        return { ...state, players };
-      }
-      return { ...state, players, activePlayerId: nextPlayer.id };
+      return nextPlayer
+        ? { ...state, players, activePlayerId: nextPlayer.id }
+        : { ...state, players };
     }
 
     case 'REVEAL_HQS': {
       if (state.phase !== 'HQ_SELECTION') return state;
-      const allChosen = state.players.every(p => !p.alive || p.hqChosen);
-      if (!allChosen) return state;
-
+      if (!state.players.every(p => !p.alive || p.hqChosen)) return state;
       const firstPlayer = alivePlayers(state)[0];
       const reinforcements = calcReinforcements(firstPlayer.id, state);
       return {
@@ -182,6 +188,7 @@ export function dispatch(action: GameAction, state: GameState): GameState {
         phase: 'REINFORCE',
         activePlayerId: firstPlayer.id,
         reinforcementsRemaining: reinforcements,
+        reinforceSnapshot: { territories: state.territories, total: reinforcements },
         mustTradeCards: firstPlayer.hand.length >= 5,
       };
     }
@@ -191,14 +198,11 @@ export function dispatch(action: GameAction, state: GameState): GameState {
     case 'TRADE_IN_CARDS': {
       if (state.phase !== 'REINFORCE' && !state.mustTradeCards) return state;
       if (state.pendingTerritoryBonus) return state;
-
       const activePlayer = state.players.find(p => p.id === state.activePlayerId)!;
       const cardIdSet = new Set(action.cardIds);
 
-      // Mode 3: HQ card cannot be part of a trade (E8.2)
       if (state.mode === 'capital' && activePlayer.hqTerritoryId) {
-        const hqCardId = `card_${activePlayer.hqTerritoryId}`;
-        if (cardIdSet.has(hqCardId)) return state;
+        if (cardIdSet.has(`card_${activePlayer.hqTerritoryId}`)) return state;
       }
 
       const selected = activePlayer.hand.filter(c => cardIdSet.has(c.id));
@@ -213,11 +217,8 @@ export function dispatch(action: GameAction, state: GameState): GameState {
       );
       const stillMustTrade = newHand.length >= 5;
 
-      // E5.4 — territory-match bonus
       const matches = [...new Set(
-        selected
-          .filter(c => c.territoryId !== null)
-          .map(c => c.territoryId!)
+        selected.filter(c => c.territoryId !== null).map(c => c.territoryId!)
           .filter(id => state.territories[id]?.owner === state.activePlayerId),
       )];
 
@@ -229,15 +230,16 @@ export function dispatch(action: GameAction, state: GameState): GameState {
         pendingTerritoryBonus = matches;
       }
 
-      return { ...state, players, territories, discardPile: [...state.discardPile, ...selected], setsTraded: state.setsTraded + 1, reinforcementsRemaining: state.reinforcementsRemaining + armies, mustTradeCards: stillMustTrade, pendingTerritoryBonus };
+      let s = log(state, mkEvent('CARDS_TRADED', state.activePlayerId, { cardIds: action.cardIds, armies, bonusTerritory: matches[0] ?? null }));
+      return { ...s, players, territories, discardPile: [...state.discardPile, ...selected], setsTraded: state.setsTraded + 1, reinforcementsRemaining: state.reinforcementsRemaining + armies, mustTradeCards: stillMustTrade, pendingTerritoryBonus };
     }
 
     case 'CLAIM_TERRITORY_BONUS': {
-      if (!state.pendingTerritoryBonus) return state;
-      if (!state.pendingTerritoryBonus.includes(action.territoryId)) return state;
+      if (!state.pendingTerritoryBonus?.includes(action.territoryId)) return state;
       if (state.territories[action.territoryId]?.owner !== state.activePlayerId) return state;
       const territories = patch(state.territories, { [action.territoryId]: { armies: state.territories[action.territoryId].armies + 2 } });
-      return { ...state, territories, pendingTerritoryBonus: null };
+      let s = log(state, mkEvent('TERRITORY_BONUS_CLAIMED', state.activePlayerId, { territoryId: action.territoryId }));
+      return { ...s, territories, pendingTerritoryBonus: null };
     }
 
     case 'REINFORCE': {
@@ -247,22 +249,27 @@ export function dispatch(action: GameAction, state: GameState): GameState {
       if (territory.owner !== state.activePlayerId) return state;
       if (action.count <= 0 || action.count > state.reinforcementsRemaining) return state;
       const territories = patch(state.territories, { [action.territoryId]: { armies: territory.armies + action.count } });
-      return { ...state, territories, reinforcementsRemaining: state.reinforcementsRemaining - action.count };
+      let s = log(state, mkEvent('ARMY_PLACED', state.activePlayerId, { territoryId: action.territoryId, count: action.count, phase: 'REINFORCE' }));
+      return { ...s, territories, reinforcementsRemaining: state.reinforcementsRemaining - action.count };
+    }
+
+    case 'UNDO_REINFORCE': {
+      if (state.phase !== 'REINFORCE' || !state.rules.allowReinforceUndo) return state;
+      if (!state.reinforceSnapshot) return state;
+      if (state.reinforcementsRemaining >= state.reinforceSnapshot.total) return state;
+      return { ...state, territories: state.reinforceSnapshot.territories, reinforcementsRemaining: state.reinforceSnapshot.total };
     }
 
     case 'END_REINFORCE': {
       if (state.phase !== 'REINFORCE') return state;
-      if (state.reinforcementsRemaining > 0) return state;
-      if (state.mustTradeCards || state.pendingTerritoryBonus) return state;
+      if (state.reinforcementsRemaining > 0 || state.mustTradeCards || state.pendingTerritoryBonus) return state;
       return { ...state, phase: 'ATTACK', lastBattleResult: null };
     }
 
     // ── ATTACK ───────────────────────────────────────────────────────────────
 
     case 'ATTACK': {
-      if (state.phase !== 'ATTACK') return state;
-      if (state.captureContext !== null) return state;
-
+      if (state.phase !== 'ATTACK' || state.captureContext !== null) return state;
       const { from, to, attackerDice } = action;
       const fromT = state.territories[from];
       const toT = state.territories[to];
@@ -270,16 +277,15 @@ export function dispatch(action: GameAction, state: GameState): GameState {
       if (fromT.owner !== state.activePlayerId) return state;
       if (toT.owner === state.activePlayerId || toT.owner === null) return state;
       if (!areAdjacent(from, to)) return state;
-      if (fromT.armies < 2) return state;
-      if (attackerDice < 1 || attackerDice > 3 || attackerDice > fromT.armies - 1) return state;
+      if (fromT.armies < 2 || attackerDice < 1 || attackerDice > 3 || attackerDice > fromT.armies - 1) return state;
 
       const defenderDiceCount = Math.min(2, toT.armies);
-      const result = battle(attackerDice, defenderDiceCount);
+      const { result, nextSeed } = battle(attackerDice, defenderDiceCount, state.rngSeed);
 
       const newAttackerArmies = fromT.armies - result.attackerLosses;
       const newDefenderArmies = toT.armies - result.defenderLosses;
       const captured = newDefenderArmies <= 0;
-      const battleResult = { ...result, captured };
+      const battleResult = { ...result, captured, seed: state.rngSeed };
 
       const territories = patch(state.territories, {
         [from]: { armies: newAttackerArmies },
@@ -290,7 +296,13 @@ export function dispatch(action: GameAction, state: GameState): GameState {
         ? { from, to, minArmies: Math.min(attackerDice, newAttackerArmies - 1), maxArmies: newAttackerArmies - 1 }
         : null;
 
-      return { ...state, territories, lastBattleResult: battleResult, captureContext };
+      let s = log(state, mkEvent('ATTACK_RESOLVED', state.activePlayerId, {
+        from, to, attackerDice, defenderDice: defenderDiceCount,
+        attackerDiceValues: result.attackerDice, defenderDiceValues: result.defenderDice,
+        attackerLosses: result.attackerLosses, defenderLosses: result.defenderLosses,
+        captured, seed: state.rngSeed,
+      }));
+      return { ...s, territories, lastBattleResult: battleResult, captureContext, rngSeed: nextSeed };
     }
 
     case 'OCCUPY': {
@@ -305,9 +317,9 @@ export function dispatch(action: GameAction, state: GameState): GameState {
       });
 
       let players = state.players;
+      let s = log(state, mkEvent('TERRITORY_CAPTURED', state.activePlayerId, { from, to, armies, previousOwner }));
 
       if (previousOwner) {
-        // Check if the captured territory was someone's HQ (Mode 3)
         const hqOwner = state.players.find(p => p.id === previousOwner && p.hqTerritoryId === to);
         if (hqOwner && state.mode === 'capital') {
           players = players.map(p =>
@@ -315,9 +327,9 @@ export function dispatch(action: GameAction, state: GameState): GameState {
               ? { ...p, capturedHqPlayerIds: [...p.capturedHqPlayerIds, previousOwner] }
               : p,
           );
+          s = log(s, mkEvent('HQ_CAPTURED', state.activePlayerId, { from: state.activePlayerId, target: previousOwner, territory: to }));
         }
 
-        // Check for elimination
         const remaining = Object.values(territories).filter(t => t.owner === previousOwner).length;
         if (remaining === 0) {
           const eliminated = players.find(p => p.id === previousOwner)!;
@@ -326,21 +338,20 @@ export function dispatch(action: GameAction, state: GameState): GameState {
             if (p.id === state.activePlayerId) return { ...p, hand: [...p.hand, ...eliminated.hand] };
             return p;
           });
+          s = log(s, mkEvent('PLAYER_ELIMINATED', state.activePlayerId, { eliminatedId: previousOwner }));
         }
       }
 
       const activeNow = players.find(p => p.id === state.activePlayerId)!;
       const mustTrade = activeNow.hand.length >= 6;
-
-      let newState: GameState = { ...state, territories, players, captureContext: null, capturedThisTurn: true, mustTradeCards: mustTrade };
+      let newState: GameState = { ...s, territories, players, captureContext: null, capturedThisTurn: true, mustTradeCards: mustTrade };
       newState = checkVictory(newState);
       if (newState.phase === 'GAME_OVER') return newState;
       return checkDestroyMissions(newState);
     }
 
     case 'END_ATTACK': {
-      if (state.phase !== 'ATTACK') return state;
-      if (state.captureContext !== null || state.mustTradeCards) return state;
+      if (state.phase !== 'ATTACK' || state.captureContext !== null || state.mustTradeCards) return state;
 
       let newState = state;
       if (state.capturedThisTurn && state.deck.length + state.discardPile.length > 0) {
@@ -348,7 +359,8 @@ export function dispatch(action: GameAction, state: GameState): GameState {
         const players = state.players.map(p =>
           p.id === state.activePlayerId ? { ...p, hand: [...p.hand, card] } : p,
         );
-        newState = { ...state, deck, discardPile, players };
+        newState = log(state, mkEvent('CARD_DRAWN', state.activePlayerId, { cardId: card.id }));
+        newState = { ...newState, deck, discardPile, players };
       }
 
       return { ...newState, phase: 'FORTIFY', capturedThisTurn: false };
@@ -360,15 +372,21 @@ export function dispatch(action: GameAction, state: GameState): GameState {
       if (state.phase !== 'FORTIFY') return state;
       const { from, to, armies } = action;
       const fromT = state.territories[from];
-      if (fromT.owner !== state.activePlayerId) return state;
-      if (armies < 1 || armies > fromT.armies - 1) return state;
-      const connected = getConnectedOwned(from, state.activePlayerId, state.territories);
-      if (!connected.has(to)) return state;
+      if (fromT.owner !== state.activePlayerId || armies < 1 || armies > fromT.armies - 1) return state;
+
+      // Apply configured fortify mode
+      const reachable = state.rules.fortifyMode === 'adjacent'
+        ? new Set(getAdjacentIds(from).filter(id => state.territories[id as TerritoryId]?.owner === state.activePlayerId))
+        : getConnectedOwned(from, state.activePlayerId, state.territories);
+
+      if (!reachable.has(to)) return state;
+
       const territories = patch(state.territories, {
         [from]: { armies: fromT.armies - armies },
         [to]: { armies: state.territories[to].armies + armies },
       });
-      return endTurn({ ...state, territories });
+      let s = log(state, mkEvent('ARMIES_FORTIFIED', state.activePlayerId, { from, to, armies }));
+      return endTurn({ ...s, territories });
     }
 
     case 'END_FORTIFY': {
@@ -381,18 +399,11 @@ export function dispatch(action: GameAction, state: GameState): GameState {
   }
 }
 
-// ── Post-setup transition helper ─────────────────────────────────────────────
+// ── Post-setup transition ─────────────────────────────────────────────────────
 
-/**
- * Called when all setup armies have been placed.
- * Routes to the correct next phase based on game mode.
- */
 function transitionAfterSetup(state: GameState): GameState {
   let players = state.players;
-
-  if (state.mode === 'mission') {
-    players = dealMissions(players);
-  }
+  if (state.mode === 'mission') players = dealMissions(players);
 
   if (state.mode === 'capital') {
     const firstPlayer = alivePlayers({ ...state, players })[0];
@@ -407,6 +418,7 @@ function transitionAfterSetup(state: GameState): GameState {
     phase: 'REINFORCE',
     activePlayerId: firstPlayer.id,
     reinforcementsRemaining: reinforcements,
+    reinforceSnapshot: { territories: state.territories, total: reinforcements },
     mustTradeCards: firstPlayer.hand.length >= 5,
   };
 }

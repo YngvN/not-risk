@@ -1,8 +1,10 @@
 import { TERRITORIES } from '../constants/riskWorldTerritories';
-import type { GameState, GameMode, Player, PlayerColor, TerritoryId } from './types';
+import type { GameState, GameMode, Player, PlayerColor, TerritoryId, GameRules } from './types';
+import { DEFAULT_RULES } from './types';
 import { createDeck } from './cards';
 import { calcReinforcements } from './reinforcement';
 import { dealMissions } from './missions';
+import { randomSeed } from './rng';
 
 const STARTING_ARMIES: Record<number, number> = { 2: 40, 3: 35, 4: 30, 5: 25, 6: 20 };
 
@@ -56,17 +58,14 @@ function makePlayers(configs: PlayerConfig[]): Player[] {
 }
 
 /**
- * Constructs the initial GameState.
- * - setupMode 'random': territories dealt randomly round-robin.
- * - randomPlacement: armies auto-placed; skips PLACING phase.
- * - mode 'mission': missions dealt after setup.
- * - mode 'capital': enters HQ_SELECTION phase after armies are placed.
+ * Constructs the initial GameState from a host configuration (E1.1).
  */
 export function createGame(
   mode: GameMode,
   playerConfigs: PlayerConfig[],
   setupMode: SetupMode = 'claim',
   randomPlacement = false,
+  rules: GameRules = DEFAULT_RULES,
 ): GameState {
   const playerCount = playerConfigs.length;
   const startingArmies = STARTING_ARMIES[playerCount] ?? 20;
@@ -78,13 +77,15 @@ export function createGame(
   ) as GameState['territories'];
 
   const { deck, discardPile } = createDeck();
+  const rngSeed = randomSeed();
 
   const setupArmiesRemaining = Object.fromEntries(
     players.map(p => [p.id, startingArmies]),
   ) as Record<string, number>;
 
-  const base: Omit<GameState, 'phase' | 'setupSubPhase' | 'activePlayerId' | 'reinforcementsRemaining' | 'mustTradeCards'> = {
+  const base: Omit<GameState, 'phase' | 'setupSubPhase' | 'activePlayerId' | 'reinforcementsRemaining' | 'mustTradeCards' | 'reinforceSnapshot'> = {
     mode,
+    rules,
     players,
     territories,
     deck,
@@ -97,6 +98,8 @@ export function createGame(
     pendingTerritoryBonus: null,
     randomPlacement,
     hqsRevealed: false,
+    rngSeed,
+    eventLog: [],
     winner: null,
   };
 
@@ -112,15 +115,16 @@ export function createGame(
       territories = autoPlaceArmies(territories, players, setupArmiesRemaining);
       if (mode === 'mission') players = dealMissions(players);
       const firstPlayer = players[0];
+      const zeroed = Object.fromEntries(players.map(p => [p.id, 0])) as Record<string, number>;
       const reinforcements = calcReinforcements(firstPlayer.id, { ...base, territories, players } as GameState);
       if (mode === 'capital') {
-        return { ...base, territories, players, setupArmiesRemaining: Object.fromEntries(players.map(p => [p.id, 0])), phase: 'HQ_SELECTION', setupSubPhase: 'PLACING', activePlayerId: firstPlayer.id, reinforcementsRemaining: 0, mustTradeCards: false };
+        return { ...base, territories, players, setupArmiesRemaining: zeroed, phase: 'HQ_SELECTION', setupSubPhase: 'PLACING', activePlayerId: firstPlayer.id, reinforcementsRemaining: 0, mustTradeCards: false, reinforceSnapshot: null };
       }
-      return { ...base, territories, players, setupArmiesRemaining: Object.fromEntries(players.map(p => [p.id, 0])), phase: 'REINFORCE', setupSubPhase: 'PLACING', activePlayerId: firstPlayer.id, reinforcementsRemaining: reinforcements, mustTradeCards: false };
+      return { ...base, territories, players, setupArmiesRemaining: zeroed, phase: 'REINFORCE', setupSubPhase: 'PLACING', activePlayerId: firstPlayer.id, reinforcementsRemaining: reinforcements, mustTradeCards: false, reinforceSnapshot: { territories, total: reinforcements } };
     }
 
-    return { ...base, territories, players, phase: 'SETUP', setupSubPhase: 'PLACING', activePlayerId: players[0].id, reinforcementsRemaining: 0, mustTradeCards: false };
+    return { ...base, territories, players, phase: 'SETUP', setupSubPhase: 'PLACING', activePlayerId: players[0].id, reinforcementsRemaining: 0, mustTradeCards: false, reinforceSnapshot: null };
   }
 
-  return { ...base, phase: 'SETUP', setupSubPhase: 'CLAIMING', activePlayerId: players[0].id, reinforcementsRemaining: 0, mustTradeCards: false };
+  return { ...base, phase: 'SETUP', setupSubPhase: 'CLAIMING', activePlayerId: players[0].id, reinforcementsRemaining: 0, mustTradeCards: false, reinforceSnapshot: null };
 }

@@ -127,6 +127,9 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   if (state.phase === 'REINFORCE') {
     const hasSet = detectSets(activePlayer.hand).length > 0;
     const canEnd = state.reinforcementsRemaining === 0;
+    const canUndo = state.rules.allowReinforceUndo &&
+      state.reinforceSnapshot !== null &&
+      state.reinforcementsRemaining < state.reinforceSnapshot.total;
     return (
       <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.labelRow}>
@@ -147,11 +150,10 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
           )}
         </View>
         <View style={styles.row}>
-          <Btn
-            label={t('game.endReinforce')}
-            onPress={() => dispatch({ type: 'END_REINFORCE' })}
-            disabled={!canEnd}
-          />
+          {canUndo && (
+            <Btn label={t('game.undoReinforce')} variant="secondary" onPress={() => dispatch({ type: 'UNDO_REINFORCE' })} />
+          )}
+          <Btn label={t('game.endReinforce')} onPress={() => dispatch({ type: 'END_REINFORCE' })} disabled={!canEnd} />
         </View>
         <Text variant="caption" style={{ color: colors.textSecondary }}>
           {t('game.tapToPlace')}
