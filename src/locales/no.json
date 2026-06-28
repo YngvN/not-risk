@@ -144,7 +144,13 @@
     "ruleUndoReinforce": "Tillat angre under forsterkning",
     "ruleFortifyChain": "Forsvar via tilkoblet kjede (fjern hake = bare tilstøtende)",
     "ruleMissionOwnTurn": "Hemmelig oppdrag: vinn på din tur (fjern hake = vinn umiddelbart)",
-    "undoReinforce": "Angre plassering"
+    "undoReinforce": "Tilbakestill alt",
+    "reinforcementLog": "Plasseringer",
+    "reinforcementLogEmpty": "Ingen hærer plassert ennå",
+    "logLabel": "Logg",
+    "gameLogLabel": "Spillogg",
+    "eventLogLabel": "Historikk",
+    "eventLogEmpty": "Ingen hendelser ennå"
   },
   "world": {
     "title": "Verden",

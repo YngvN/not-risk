@@ -249,8 +249,9 @@ export function dispatch(action: GameAction, state: GameState): GameState {
       if (territory.owner !== state.activePlayerId) return state;
       if (action.count <= 0 || action.count > state.reinforcementsRemaining) return state;
       const territories = patch(state.territories, { [action.territoryId]: { armies: territory.armies + action.count } });
-      let s = log(state, mkEvent('ARMY_PLACED', state.activePlayerId, { territoryId: action.territoryId, count: action.count, phase: 'REINFORCE' }));
-      return { ...s, territories, reinforcementsRemaining: state.reinforcementsRemaining - action.count };
+      // Events are NOT emitted here — placements are only logged at END_REINFORCE
+      // so that cancelled/undone placements never appear in the history.
+      return { ...state, territories, reinforcementsRemaining: state.reinforcementsRemaining - action.count };
     }
 
     case 'UNDO_REINFORCE': {
@@ -260,10 +261,35 @@ export function dispatch(action: GameAction, state: GameState): GameState {
       return { ...state, territories: state.reinforceSnapshot.territories, reinforcementsRemaining: state.reinforceSnapshot.total };
     }
 
+    case 'REMOVE_REINFORCEMENT': {
+      if (state.phase !== 'REINFORCE' || !state.rules.allowReinforceUndo) return state;
+      if (!state.reinforceSnapshot) return state;
+      const snap = state.reinforceSnapshot.territories[action.territoryId];
+      if (!snap) return state;
+      const current = state.territories[action.territoryId];
+      const delta = current.armies - snap.armies;
+      if (delta <= 0) return state;
+      const territories = patch(state.territories, { [action.territoryId]: { armies: snap.armies } });
+      return { ...state, territories, reinforcementsRemaining: state.reinforcementsRemaining + delta };
+    }
+
     case 'END_REINFORCE': {
       if (state.phase !== 'REINFORCE') return state;
       if (state.reinforcementsRemaining > 0 || state.mustTradeCards || state.pendingTerritoryBonus) return state;
-      return { ...state, phase: 'ATTACK', lastBattleResult: null };
+
+      // Commit placement events now that the phase is confirmed.
+      // Diffing against the snapshot means undone/cancelled placements are never logged.
+      let s = state;
+      if (state.reinforceSnapshot) {
+        for (const [id, ts] of Object.entries(state.territories) as [TerritoryId, TerritoryState][]) {
+          const delta = ts.armies - (state.reinforceSnapshot.territories[id]?.armies ?? 0);
+          if (delta > 0 && ts.owner === state.activePlayerId) {
+            s = log(s, mkEvent('ARMY_PLACED', state.activePlayerId, { territoryId: id, count: delta, phase: 'REINFORCE' }));
+          }
+        }
+      }
+
+      return { ...s, phase: 'ATTACK', lastBattleResult: null };
     }
 
     // ── ATTACK ───────────────────────────────────────────────────────────────

@@ -144,7 +144,13 @@
     "ruleUndoReinforce": "Allow undo during reinforcement",
     "ruleFortifyChain": "Fortify via connected chain (uncheck = adjacent only)",
     "ruleMissionOwnTurn": "Secret mission: win on your own turn (uncheck = win immediately)",
-    "undoReinforce": "Undo placement"
+    "undoReinforce": "Reset all",
+    "reinforcementLog": "Placements",
+    "reinforcementLogEmpty": "No armies placed yet",
+    "logLabel": "Log",
+    "gameLogLabel": "Game Log",
+    "eventLogLabel": "History",
+    "eventLogEmpty": "No events yet"
   },
   "world": {
     "title": "World",

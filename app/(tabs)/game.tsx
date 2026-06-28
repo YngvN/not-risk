@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { View, Pressable, StyleSheet, TextInput } from 'react-native';
+import { View, Pressable, StyleSheet, TextInput, useWindowDimensions } from 'react-native';
 import { Screen } from '../../src/components/layout/Screen';
 import { Text } from '../../src/components/ui/Text';
 import { ZoomableMap } from '../../src/components/map/ZoomableMap';
 import { RiskBoardMap } from '../../src/components/map/RiskBoardMap';
 import {
   PhaseBar, DiceModal, ActionPanel, CardHandModal,
-  PassDeviceScreen, MissionCard, type SelectionMode,
+  PassDeviceScreen, MissionCard, GameSidePanel, GameSlidePanel,
+  type SelectionMode,
 } from '../../src/components/game';
 import { useGame, PLAYER_COLOR_HEX } from '../../src/context/GameContext';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -290,15 +291,23 @@ function GameOverScreen() {
 
 // ── Main play screen ──────────────────────────────────────────────────────────
 
+const WIDE_BREAKPOINT = 680;
+
 function PlayScreen() {
   const { state, dispatch } = useGame();
   const { colors } = useTheme();
   const { t } = useLanguage();
+  const { width } = useWindowDimensions();
+  const isWide = width >= WIDE_BREAKPOINT;
+
   const [selection, setSelection] = useState<SelectionMode>({ phase: 'none' });
   const [showDice, setShowDice] = useState(false);
   const [showCards, setShowCards] = useState(false);
   const [showMission, setShowMission] = useState(false);
   const [passDeviceVisible, setPassDeviceVisible] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [logHighlightedIds, setLogHighlightedIds] = useState<Set<string>>(new Set());
   const prevActivePlayer = useRef<string | null>(null);
 
   const st = state!;
@@ -372,7 +381,39 @@ function PlayScreen() {
     return { selectableIds: selectable, highlightedIds: highlighted };
   }, [st, activePlayerId, selection, hqHighlights]);
 
+  // Derive per-territory reinforcement log from snapshot diff (E0.4 / E2.3)
+  const reinforcementLog = useMemo(() => {
+    if (st.phase !== 'REINFORCE' || !st.reinforceSnapshot || !st.rules.allowReinforceUndo) return [];
+    return Object.values(st.territories)
+      .map(ts => ({
+        territoryId: ts.id,
+        armies: ts.armies - (st.reinforceSnapshot!.territories[ts.id]?.armies ?? 0),
+      }))
+      .filter(e => e.armies > 0);
+  }, [st.territories, st.reinforceSnapshot, st.phase, st.rules.allowReinforceUndo]);
+
+  const showLog = true; // always show the panel toggle; content adapts to phase
+
+  const handleEventSelect = (eventId: string | null, territoryIds: TerritoryId[]) => {
+    setSelectedEventId(eventId);
+    setLogHighlightedIds(new Set(territoryIds));
+  };
+
+  // Clear log highlights when phase changes
+  React.useEffect(() => {
+    setSelectedEventId(null);
+    setLogHighlightedIds(new Set());
+  }, [st.phase]);
+
+  // Merge phase-based highlights with log-click highlights
+  const allHighlightedIds = useMemo(
+    () => logHighlightedIds.size > 0 ? new Set([...highlightedIds, ...logHighlightedIds]) : highlightedIds,
+    [highlightedIds, logHighlightedIds],
+  );
+
   const handleTerritorySelect = (territory: Territory | null) => {
+    // Clear log highlight when user interacts with the map
+    if (logHighlightedIds.size > 0) { setLogHighlightedIds(new Set()); setSelectedEventId(null); }
     if (!territory) return;
     const id = territory.id as TerritoryId;
     const ts = st.territories[id];
@@ -410,32 +451,76 @@ function PlayScreen() {
     }
   };
 
+  const panelProps = {
+    reinforcementEntries: reinforcementLog,
+    onRemoveReinforcement: (id: TerritoryId) => dispatch({ type: 'REMOVE_REINFORCEMENT', territoryId: id }),
+    events: st.eventLog,
+    players: st.players,
+    selectedEventId,
+    onEventSelect: handleEventSelect,
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <PhaseBar state={st} />
+      {/* Top bar: phase info + mission button + log toggle on small screens */}
+      <View style={styles.topBar}>
+        <View style={{ flex: 1 }}>
+          <PhaseBar state={st} />
+        </View>
+        <View style={styles.topBarActions}>
+          {st.mode === 'mission' && activePlayer.mission && (
+            <Pressable
+              onPress={() => setShowMission(true)}
+              style={[styles.topChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Text variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>
+                {t('game.viewMission')}
+              </Text>
+            </Pressable>
+          )}
+          {/* Log toggle — small screens only */}
+          {!isWide && (
+            <Pressable
+              onPress={() => setLogOpen(v => !v)}
+              style={[styles.topChip, { backgroundColor: logOpen ? colors.primary : colors.surface, borderColor: colors.border }]}
+            >
+              <Text variant="caption" style={{ color: logOpen ? '#fff' : colors.text, fontWeight: '700' }}>
+                {t('game.logLabel')}{reinforcementLog.length > 0 ? ` · ${reinforcementLog.length}` : ''}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
 
-      {/* Mission view button for Mode 2 */}
-      {st.mode === 'mission' && activePlayer.mission && (
-        <Pressable
-          onPress={() => setShowMission(true)}
-          style={[styles.missionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-        >
-          <Text variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>
-            {t('game.viewMission')}
-          </Text>
-        </Pressable>
-      )}
+      {/* Map + optional wide-screen log sidebar */}
+      <View style={styles.mapRow}>
+        <ZoomableMap>
+          <RiskBoardMap
+            showRiskLayer
+            onTerritorySelect={handleTerritorySelect}
+            territoryFills={territoryFills}
+            armyCounts={armyCounts}
+            highlightedIds={allHighlightedIds}
+            selectableIds={selectableIds}
+          />
+        </ZoomableMap>
 
-      <ZoomableMap>
-        <RiskBoardMap
-          showRiskLayer
-          onTerritorySelect={handleTerritorySelect}
-          territoryFills={territoryFills}
-          armyCounts={armyCounts}
-          highlightedIds={highlightedIds}
-          selectableIds={selectableIds}
-        />
-      </ZoomableMap>
+        {/* Wide-screen sidebar — always shown */}
+        {isWide && (
+          <View style={styles.logSidebar}>
+            <GameSidePanel {...panelProps} />
+          </View>
+        )}
+
+        {/* Small-screen slide panel */}
+        {!isWide && (
+          <GameSlidePanel
+            visible={logOpen}
+            {...panelProps}
+            onClose={() => setLogOpen(false)}
+          />
+        )}
+      </View>
 
       <ActionPanel state={st} dispatch={dispatch} selection={selection} onSelectionChange={setSelection} onOpenCards={() => setShowCards(true)} />
 
@@ -497,6 +582,11 @@ const styles = StyleSheet.create({
   winnerDot:     { width: 64, height: 64, borderRadius: 32, marginBottom: Spacing.md },
   missionBadge:  { borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs },
   missionBtn:    { borderBottomWidth: 1, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, alignItems: 'flex-end' },
+  topBar:        { flexDirection: 'row', alignItems: 'stretch' },
+  topBarActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingRight: Spacing.sm },
+  topChip:       { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 4 },
+  mapRow:        { flex: 1, flexDirection: 'row', overflow: 'hidden' },
+  logSidebar:    { width: 200 },
   hqHeader:      { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, borderBottomWidth: 1 },
   colorDot:      { width: 16, height: 16, borderRadius: 8 },
   hqPanel:       { borderTopWidth: 1, padding: Spacing.md, gap: Spacing.sm },

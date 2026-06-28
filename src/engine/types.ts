@@ -159,6 +159,7 @@ export type GameAction =
   | { type: 'CLAIM_TERRITORY_BONUS'; territoryId: TerritoryId }
   | { type: 'REINFORCE'; territoryId: TerritoryId; count: number }
   | { type: 'UNDO_REINFORCE' }
+  | { type: 'REMOVE_REINFORCEMENT'; territoryId: TerritoryId }
   | { type: 'END_REINFORCE' }
   | { type: 'ATTACK'; from: TerritoryId; to: TerritoryId; attackerDice: number }
   | { type: 'OCCUPY'; armies: number }
