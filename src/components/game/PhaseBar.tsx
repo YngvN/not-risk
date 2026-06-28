@@ -20,8 +20,7 @@ function phaseLabel(phase: Phase, setupSubPhase: GameState['setupSubPhase']): st
 }
 
 /**
- * Persistent strip showing the active player, current phase, and remaining armies.
- * Rendered at the top of the game screen.
+ * Single-line strip: colour dot · phase label · armies remaining · player name (small, right).
  */
 export function PhaseBar({ state }: PhaseBarProps) {
   const { colors } = useTheme();
@@ -35,8 +34,7 @@ export function PhaseBar({ state }: PhaseBarProps) {
 
   const showArmies =
     (state.phase === 'REINFORCE' && state.reinforcementsRemaining > 0) ||
-    (state.phase === 'SETUP' &&
-      (state.setupArmiesRemaining[activePlayer.id] ?? 0) > 0);
+    (state.phase === 'SETUP' && (state.setupArmiesRemaining[activePlayer.id] ?? 0) > 0);
 
   const armyCount =
     state.phase === 'REINFORCE'
@@ -45,16 +43,21 @@ export function PhaseBar({ state }: PhaseBarProps) {
 
   return (
     <View style={[styles.bar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={[styles.colorDot, { backgroundColor: playerColor }]} />
-      <View style={styles.info}>
-        <Text variant="body" style={{ color: colors.text, fontWeight: '700' }}>
-          {activePlayer.name}
-        </Text>
-        <Text variant="caption" style={{ color: colors.textSecondary }}>
-          {t(labelKey)}
-          {showArmies ? `  ·  ${t('game.armiesRemaining').replace('{{n}}', String(armyCount))}` : ''}
-        </Text>
-      </View>
+      <View style={[styles.dot, { backgroundColor: playerColor }]} />
+
+      <Text variant="body" style={{ color: colors.text, flex: 1 }} numberOfLines={1}>
+        {t(labelKey)}
+        {showArmies
+          ? <Text variant="body" style={{ color: colors.textSecondary }}>
+              {`  ·  ${t('game.armiesRemaining').replace('{{n}}', String(armyCount))}`}
+            </Text>
+          : null}
+      </Text>
+
+      <Text variant="caption" style={{ color: colors.textSecondary }}>
+        {activePlayer.name}
+      </Text>
+
       {state.mustTradeCards && (
         <View style={[styles.badge, { backgroundColor: colors.warning }]}>
           <Text variant="caption" style={{ color: '#fff', fontWeight: '700' }}>!</Text>
@@ -73,14 +76,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     gap: Spacing.sm,
   },
-  colorDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-  },
-  info: {
-    flex: 1,
-    gap: 2,
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    flexShrink: 0,
   },
   badge: {
     width: 20,

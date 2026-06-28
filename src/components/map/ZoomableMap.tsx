@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { View, Pressable, StyleSheet, LayoutChangeEvent, Platform } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -6,6 +6,18 @@ import Animated, {
   withSpring,
   clamp,
 } from 'react-native-reanimated';
+
+/** Imperative handle for programmatic zoom control. */
+export interface ZoomableMapRef {
+  /**
+   * Animate the map to center on a content point with the given scale.
+   * @param px  X offset from the content's top-left, in container pixels.
+   * @param py  Y offset from the content's top-left, in container pixels.
+   * @param targetScale  Zoom level (1 = fit, MAX_SCALE = 5).
+   */
+  zoomToPoint(px: number, py: number, targetScale: number): void;
+  resetZoom(): void;
+}
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from '../../hooks/useTheme';
 import { Text } from '../ui/Text';
@@ -28,7 +40,8 @@ const SPRING = { damping: 20, stiffness: 220 };
  *
  * The tab bar and controls rendered outside this component are unaffected.
  */
-export function ZoomableMap({ children }: { children: React.ReactNode }) {
+export const ZoomableMap = forwardRef<ZoomableMapRef, { children: React.ReactNode }>(
+function ZoomableMap({ children }, ref) {
   const { colors } = useTheme();
 
   const scale = useSharedValue(1);
@@ -173,6 +186,29 @@ export function ZoomableMap({ children }: { children: React.ReactNode }) {
     }
   };
 
+  useImperativeHandle(ref, () => ({
+    zoomToPoint(px: number, py: number, targetScale: number) {
+      const s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, targetScale));
+      // Center on (px, py): tx = cw/2 - px, ty = ch/2 - py, then clamp
+      const newTx = clampTx(cw.value / 2 - px, s);
+      const newTy = clampTy(ch.value / 2 - py, s);
+      scale.value = withSpring(s, SPRING);
+      savedScale.value = s;
+      tx.value = withSpring(newTx, SPRING);
+      ty.value = withSpring(newTy, SPRING);
+      savedTx.value = newTx;
+      savedTy.value = newTy;
+    },
+    resetZoom() {
+      scale.value = withSpring(MIN_SCALE, SPRING);
+      savedScale.value = MIN_SCALE;
+      tx.value = withSpring(0, SPRING);
+      ty.value = withSpring(0, SPRING);
+      savedTx.value = 0;
+      savedTy.value = 0;
+    },
+  }));
+
   return (
     <View ref={containerRef} style={styles.container} onLayout={onLayout}>
       <GestureDetector gesture={gesture}>
@@ -207,7 +243,7 @@ export function ZoomableMap({ children }: { children: React.ReactNode }) {
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

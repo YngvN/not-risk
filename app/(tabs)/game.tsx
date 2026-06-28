@@ -2,10 +2,10 @@ import React, { useState, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet, TextInput, useWindowDimensions } from 'react-native';
 import { Screen } from '../../src/components/layout/Screen';
 import { Text } from '../../src/components/ui/Text';
-import { ZoomableMap } from '../../src/components/map/ZoomableMap';
-import { RiskBoardMap } from '../../src/components/map/RiskBoardMap';
+import { ZoomableMap, type ZoomableMapRef } from '../../src/components/map/ZoomableMap';
+import { RiskBoardMap, TERRITORY_LABEL_POS } from '../../src/components/map/RiskBoardMap';
 import {
-  PhaseBar, DiceModal, ActionPanel, CardHandModal,
+  DiceModal, ActionPanel, CardHandModal,
   PassDeviceScreen, MissionCard, GameSidePanel, GameSlidePanel,
   type SelectionMode,
 } from '../../src/components/game';
@@ -16,7 +16,7 @@ import { Spacing, BorderRadius } from '../../src/constants/spacing';
 import type { PlayerColor, TerritoryId, GameMode, GameRules } from '../../src/engine/types';
 import { DEFAULT_RULES } from '../../src/engine/types';
 import { TERRITORIES, type Territory } from '../../src/constants/riskWorldTerritories';
-import { areAdjacent, getConnectedOwned } from '../../src/engine/board';
+import { areAdjacent, getConnectedOwned, getAdjacentIds } from '../../src/engine/board';
 import type { PlayerConfig, SetupMode } from '../../src/engine/setup';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -309,10 +309,60 @@ function PlayScreen() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [logHighlightedIds, setLogHighlightedIds] = useState<Set<string>>(new Set());
   const prevActivePlayer = useRef<string | null>(null);
+  const zoomMapRef = useRef<ZoomableMapRef>(null);
 
   const st = state!;
   const activePlayerId = st.activePlayerId;
   const activePlayer = st.players.find(p => p.id === activePlayerId)!;
+
+  // ── Zoom helpers (attack phase) ───────────────────────────────────────────
+
+  /** Risk board SVG viewBox origin and width — must match VIEWBOX in RiskBoardMap.tsx. */
+  const VB = { x: 191, y: 60, w: 714 } as const;
+
+  const zoomToTerritory = React.useCallback((from: TerritoryId) => {
+    // Collect label positions for the attacker and all its neighbours
+    const ids = [from, ...getAdjacentIds(from)] as string[];
+    const positions = ids.map(id => TERRITORY_LABEL_POS[id]).filter((p): p is { x: number; y: number } => Boolean(p));
+    if (positions.length === 0) return;
+
+    const minX = Math.min(...positions.map(p => p.x));
+    const maxX = Math.max(...positions.map(p => p.x));
+    const minY = Math.min(...positions.map(p => p.y));
+    const maxY = Math.max(...positions.map(p => p.y));
+
+    const svgCx = (minX + maxX) / 2;
+    const svgCy = (minY + maxY) / 2;
+
+    // bbox dimensions in SVG units (with padding)
+    const pad = 70;
+    const bboxW = Math.max(maxX - minX + pad * 2, 160);
+
+    // Scale to fill ~75 % of the available map width
+    const mapWidth = isWide ? width - 200 : width;
+    const targetScale = Math.min(3.8, Math.max(1.8, 0.75 * VB.w / bboxW));
+
+    // Convert SVG focal point to container pixel coords
+    const px = (svgCx - VB.x) * mapWidth / VB.w;
+    const py = (svgCy - VB.y) * mapWidth / VB.w;
+
+    zoomMapRef.current?.zoomToPoint(px, py, targetScale);
+  }, [isWide, width]);
+
+  // Zoom in when attacker territory selected; reset otherwise
+  React.useEffect(() => {
+    if (selection.phase === 'ATTACK_FROM') {
+      zoomToTerritory(selection.from);
+    } else if (selection.phase === 'none' || selection.phase === 'FORTIFY_FROM' || selection.phase === 'FORTIFY_TO') {
+      zoomMapRef.current?.resetZoom();
+    }
+    // Keep zoom when moving to ATTACK_TO (target selection)
+  }, [selection.phase, (selection as { from?: TerritoryId }).from]);
+
+  // Reset zoom when leaving attack phase
+  React.useEffect(() => {
+    if (st.phase !== 'ATTACK') zoomMapRef.current?.resetZoom();
+  }, [st.phase]);
 
   React.useEffect(() => {
     if (state?.lastBattleResult) setShowDice(true);
@@ -412,9 +462,16 @@ function PlayScreen() {
   );
 
   const handleTerritorySelect = (territory: Territory | null) => {
-    // Clear log highlight when user interacts with the map
     if (logHighlightedIds.size > 0) { setLogHighlightedIds(new Set()); setSelectedEventId(null); }
-    if (!territory) return;
+
+    if (!territory) {
+      // Background tap or dimmed territory — deselect everything and reset zoom
+      if (selection.phase !== 'none') {
+        setSelection({ phase: 'none' });
+        zoomMapRef.current?.resetZoom();
+      }
+      return;
+    }
     const id = territory.id as TerritoryId;
     const ts = st.territories[id];
 
@@ -462,12 +519,9 @@ function PlayScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Top bar: phase info + mission button + log toggle on small screens */}
-      <View style={styles.topBar}>
-        <View style={{ flex: 1 }}>
-          <PhaseBar state={st} />
-        </View>
-        <View style={styles.topBarActions}>
+      {/* Chips row — only rendered when at least one chip is visible */}
+      {(st.mode === 'mission' && activePlayer.mission || !isWide) && (
+        <View style={[styles.topBarActions, { borderBottomWidth: 1, borderColor: colors.border }]}>
           {st.mode === 'mission' && activePlayer.mission && (
             <Pressable
               onPress={() => setShowMission(true)}
@@ -478,7 +532,6 @@ function PlayScreen() {
               </Text>
             </Pressable>
           )}
-          {/* Log toggle — small screens only */}
           {!isWide && (
             <Pressable
               onPress={() => setLogOpen(v => !v)}
@@ -490,11 +543,11 @@ function PlayScreen() {
             </Pressable>
           )}
         </View>
-      </View>
+      )}
 
       {/* Map + optional wide-screen log sidebar */}
       <View style={styles.mapRow}>
-        <ZoomableMap>
+        <ZoomableMap ref={zoomMapRef}>
           <RiskBoardMap
             showRiskLayer
             onTerritorySelect={handleTerritorySelect}
@@ -582,8 +635,7 @@ const styles = StyleSheet.create({
   winnerDot:     { width: 64, height: 64, borderRadius: 32, marginBottom: Spacing.md },
   missionBadge:  { borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs },
   missionBtn:    { borderBottomWidth: 1, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, alignItems: 'flex-end' },
-  topBar:        { flexDirection: 'row', alignItems: 'stretch' },
-  topBarActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingRight: Spacing.sm },
+  topBarActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: Spacing.xs, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs },
   topChip:       { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 4 },
   mapRow:        { flex: 1, flexDirection: 'row', overflow: 'hidden' },
   logSidebar:    { width: 200 },

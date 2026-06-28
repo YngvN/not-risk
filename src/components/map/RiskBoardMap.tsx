@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Svg, { G, Path, Text as SvgText, Circle } from 'react-native-svg';
+import Svg, { G, Path, Text as SvgText, Circle, Rect } from 'react-native-svg';
 import Animated, { useAnimatedProps, withSpring } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
 import { TERRITORIES, Territory, TerritoryId } from '../../constants/riskWorldTerritories';
@@ -10,11 +10,14 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 /**
  * ViewBox trimmed to the content bounds of the 42 territory paths.
+ * y starts at 60 instead of the content boundary (~130) to add empty sky above
+ * northern territories (Greenland, Alaska, NW Territory) so they can be
+ * properly centred when the map zooms in on them.
  * The SVG declared width/height (749×519) is smaller than the actual content
  * which extends to ~x=900 (Asia/Pacific wrapping right).
  */
-const VIEWBOX = '191 130 714 474';
-const VIEWBOX_ASPECT = 714 / 474;
+const VIEWBOX = '191 60 714 550';
+const VIEWBOX_ASPECT = 714 / 550;
 
 /**
  * Maps Risk_board.svg path IDs → TerritoryId.
@@ -111,6 +114,18 @@ const LABEL_POS: Record<string, { x: number; y: number }> = {
   eastern_australia:     { x: 866, y: 548 },
 };
 
+/**
+ * TerritoryId → label centroid in Risk_board.svg SVG coordinate space.
+ * ViewBox: 191 130 714 474 (x-range 191–905, y-range 130–604).
+ * Used by PlayScreen to compute the zoom focal point when a territory is selected.
+ */
+export const TERRITORY_LABEL_POS: Partial<Record<string, { x: number; y: number }>> =
+  Object.fromEntries(
+    Object.entries(SVG_ID_TO_TERRITORY)
+      .filter(([svgId]) => LABEL_POS[svgId] !== undefined)
+      .map(([svgId, terrId]) => [terrId, LABEL_POS[svgId]]),
+  );
+
 const SHORT_LABELS: Partial<Record<string, string>> = {
   northwest_territory:   'NW Terr.',
   western_united_states: 'W.US',
@@ -173,8 +188,12 @@ export function RiskBoardMap({
   const handlePress = (svgId: string) => {
     if (!showRiskLayer) return;
     const territoryId = SVG_ID_TO_TERRITORY[svgId];
-    // Reject press if selectableIds is provided and this territory isn't in it
-    if (selectableIds && territoryId && !selectableIds.has(territoryId)) return;
+    // Non-selectable territory tap → deselect (clear, notify parent with null)
+    if (selectableIds && territoryId && !selectableIds.has(territoryId)) {
+      setSelectedSvgId(null);
+      onTerritorySelect?.(null);
+      return;
+    }
     const next = selectedSvgId === svgId ? null : svgId;
     setSelectedSvgId(next);
     onTerritorySelect?.(
@@ -184,8 +203,17 @@ export function RiskBoardMap({
     );
   };
 
+  const handleBackgroundPress = () => {
+    if (!showRiskLayer) return;
+    setSelectedSvgId(null);
+    onTerritorySelect?.(null);
+  };
+
   return (
     <Svg viewBox={VIEWBOX} width="100%" style={{ aspectRatio: VIEWBOX_ASPECT }}>
+      {/* Transparent background — catches taps on ocean/empty space to deselect. */}
+      <Rect x={191} y={60} width={714} height={550} fill="transparent" onPress={handleBackgroundPress} />
+
       {/* Dotted connection indicators — rendered BELOW territories so territory
           fills sit on top. fill="none" prevents enclosed areas from painting
           over map content; only the stroke/dot outlines are visible in ocean gaps. */}

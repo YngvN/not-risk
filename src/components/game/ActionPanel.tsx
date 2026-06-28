@@ -8,6 +8,7 @@ import { Spacing, BorderRadius } from '../../constants/spacing';
 import type { GameState, GameAction, TerritoryId } from '../../engine/types';
 import { detectSets } from '../../engine/cards';
 import { TERRITORIES } from '../../constants/riskWorldTerritories';
+import { PLAYER_COLOR_HEX } from '../../context/GameContext';
 
 export type SelectionMode =
   | { phase: 'none' }
@@ -23,6 +24,8 @@ interface ActionPanelProps {
   onSelectionChange: (s: SelectionMode) => void;
   onOpenCards: () => void;
 }
+
+// ── Shared sub-components ────────────────────────────────────────────────────
 
 function Btn({
   label,
@@ -46,7 +49,34 @@ function Btn({
 }
 
 /**
- * Context-sensitive bottom panel that shows legal actions for the current phase.
+ * Wrapper that gives every phase panel a consistent container:
+ * thick top border in the player's colour, small name label at the top.
+ */
+function Panel({
+  playerColor,
+  playerName,
+  children,
+}: {
+  playerColor: string;
+  playerName: string;
+  children: React.ReactNode;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.panel, { backgroundColor: colors.card, borderTopColor: playerColor }]}>
+      <Text style={{ color: colors.textSecondary, fontSize: 11, letterSpacing: 0.2 }}>
+        {playerName}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+/**
+ * Context-sensitive bottom panel.
+ * The top border colour matches the active player; their name is shown small above the controls.
  */
 export function ActionPanel({ state, dispatch, selection, onSelectionChange, onOpenCards }: ActionPanelProps) {
   const { colors } = useTheme();
@@ -55,6 +85,8 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   const [occupyArmies, setOccupyArmies] = useState(1);
 
   const activePlayer = state.players.find(p => p.id === state.activePlayerId)!;
+  const playerColor = PLAYER_COLOR_HEX[activePlayer.color];
+  const name = activePlayer.name;
 
   React.useEffect(() => {
     if (state.captureContext) setOccupyArmies(state.captureContext.minArmies);
@@ -64,10 +96,10 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
     setFortifyArmies(1);
   }, [selection.phase === 'FORTIFY_TO' ? (selection as { to: TerritoryId }).to : null]);
 
-  // ── Territory bonus pending (E5.4) ──────────────────────────────────────────
+  // ── Territory bonus pending ──────────────────────────────────────────────────
   if (state.pendingTerritoryBonus) {
     return (
-      <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Panel playerColor={playerColor} playerName={name}>
         <Text variant="body" style={{ color: colors.success, fontWeight: '700' }}>
           {t('game.territoryBonus')}
         </Text>
@@ -77,25 +109,24 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
         <View style={styles.row}>
           {state.pendingTerritoryBonus.map(id => {
             const terr = TERRITORIES.find(tr => tr.id === id);
-            const name = terr ? t(terr.labelKey) : id;
             return (
               <Btn
                 key={id}
-                label={`+2 ${name}`}
+                label={`+2 ${terr ? t(terr.labelKey) : id}`}
                 onPress={() => dispatch({ type: 'CLAIM_TERRITORY_BONUS', territoryId: id })}
               />
             );
           })}
         </View>
-      </View>
+      </Panel>
     );
   }
 
-  // ── Occupy (capture pending) ────────────────────────────────────────────────
+  // ── Occupy (capture pending) ─────────────────────────────────────────────────
   if (state.captureContext) {
     const { minArmies, maxArmies } = state.captureContext;
     return (
-      <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Panel playerColor={playerColor} playerName={name}>
         <View style={styles.labelRow}>
           <Text variant="body" style={{ color: colors.text, fontWeight: '700' }}>
             {t('game.occupyTitle')}
@@ -107,23 +138,23 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
           label={t('game.occupyMove').replace('{{n}}', String(occupyArmies))}
           onPress={() => dispatch({ type: 'OCCUPY', armies: occupyArmies })}
         />
-      </View>
+      </Panel>
     );
   }
 
-  // ── Card trade-in required ──────────────────────────────────────────────────
+  // ── Must trade cards ─────────────────────────────────────────────────────────
   if (state.mustTradeCards) {
     return (
-      <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Panel playerColor={playerColor} playerName={name}>
         <Text variant="body" style={{ color: colors.warning, fontWeight: '700' }}>
           {t('game.mustTrade')}
         </Text>
         <Btn label={`${t('game.tradeCards')}  (${activePlayer.hand.length})`} onPress={onOpenCards} />
-      </View>
+      </Panel>
     );
   }
 
-  // ── REINFORCE ───────────────────────────────────────────────────────────────
+  // ── REINFORCE ────────────────────────────────────────────────────────────────
   if (state.phase === 'REINFORCE') {
     const hasSet = detectSets(activePlayer.hand).length > 0;
     const canEnd = state.reinforcementsRemaining === 0;
@@ -131,7 +162,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
       state.reinforceSnapshot !== null &&
       state.reinforcementsRemaining < state.reinforceSnapshot.total;
     return (
-      <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Panel playerColor={playerColor} playerName={name}>
         <View style={styles.labelRow}>
           <Text variant="caption" style={{ color: colors.textSecondary }}>
             {t('game.armiesRemaining').replace('{{n}}', String(state.reinforcementsRemaining))}
@@ -158,17 +189,17 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
         <Text variant="caption" style={{ color: colors.textSecondary }}>
           {t('game.tapToPlace')}
         </Text>
-      </View>
+      </Panel>
     );
   }
 
-  // ── ATTACK ──────────────────────────────────────────────────────────────────
+  // ── ATTACK ───────────────────────────────────────────────────────────────────
   if (state.phase === 'ATTACK') {
     if (selection.phase === 'ATTACK_TO') {
       const { from, to } = selection;
       const maxDice = Math.min(3, state.territories[from].armies - 1);
       return (
-        <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Panel playerColor={playerColor} playerName={name}>
           <Text variant="body" style={{ color: colors.text, fontWeight: '700' }}>
             {t('game.phaseAttack')}
           </Text>
@@ -185,29 +216,29 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
             ))}
           </View>
           <Btn label={t('common.cancel')} variant="secondary" onPress={() => onSelectionChange({ phase: 'none' })} />
-        </View>
+        </Panel>
       );
     }
 
     return (
-      <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Panel playerColor={playerColor} playerName={name}>
         <Text variant="caption" style={{ color: colors.textSecondary }}>
           {selection.phase === 'ATTACK_FROM'
             ? t('game.tapEnemyToAttack')
             : t('game.tapOwnToAttackFrom')}
         </Text>
         <Btn label={t('game.endAttack')} variant="secondary" onPress={() => dispatch({ type: 'END_ATTACK' })} />
-      </View>
+      </Panel>
     );
   }
 
-  // ── FORTIFY ─────────────────────────────────────────────────────────────────
+  // ── FORTIFY ──────────────────────────────────────────────────────────────────
   if (state.phase === 'FORTIFY') {
     if (selection.phase === 'FORTIFY_TO') {
       const { from, to } = selection;
       const maxMove = state.territories[from].armies - 1;
       return (
-        <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Panel playerColor={playerColor} playerName={name}>
           <View style={styles.labelRow}>
             <Text variant="body" style={{ color: colors.text, fontWeight: '700' }}>
               {t('game.phaseFortify')}
@@ -230,19 +261,19 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
               }}
             />
           </View>
-        </View>
+        </Panel>
       );
     }
 
     return (
-      <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Panel playerColor={playerColor} playerName={name}>
         <Text variant="caption" style={{ color: colors.textSecondary }}>
           {selection.phase === 'FORTIFY_FROM'
             ? t('game.tapConnectedToFortify')
             : t('game.tapOwnToFortifyFrom')}
         </Text>
         <Btn label={t('game.endFortify')} variant="secondary" onPress={() => dispatch({ type: 'END_FORTIFY' })} />
-      </View>
+      </Panel>
     );
   }
 
@@ -251,7 +282,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
 
 const styles = StyleSheet.create({
   panel: {
-    borderTopWidth: 1,
+    borderTopWidth: 3,
     padding: Spacing.md,
     gap: Spacing.sm,
   },
