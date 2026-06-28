@@ -27,6 +27,10 @@ export default function HomeScreen() {
     router.navigate('/game' as never);
   };
 
+  const handleLanGame = () => {
+    router.navigate('/lobby' as never);
+  };
+
   const handleSettings = () => {
     router.navigate('/settings' as never);
   };
@@ -97,6 +101,18 @@ export default function HomeScreen() {
           </Pressable>
 
           <Pressable
+            onPress={handleLanGame}
+            style={[styles.btn, styles.btnSecondary, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+          >
+            <View style={styles.btnRow}>
+              <Ionicons name="wifi-outline" size={18} color={colors.text} />
+              <Text variant="body" style={[styles.btnTextSecondary, { color: colors.text }]}>
+                {t('home.newLanGame')}
+              </Text>
+            </View>
+          </Pressable>
+
+          <Pressable
             onPress={handleSettings}
             style={[styles.btn, styles.btnSecondary, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
           >
@@ -163,5 +179,10 @@ const styles = StyleSheet.create({
   },
   btnTextSecondary: {
     fontWeight: '600',
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
   },
 });

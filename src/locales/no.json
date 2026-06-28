@@ -2,7 +2,8 @@
   "home": {
     "title": "fRISKy",
     "welcome": "Verdensherredømme venter.",
-    "description": "Et Risk-inspirert strategispill."
+    "description": "Et Risk-inspirert strategispill.",
+    "newLanGame": "Nytt LAN-spill"
   },
   "components": {
     "title": "Komponenter",
@@ -166,6 +167,40 @@
     "continentAF": "Afrika",
     "continentAS": "Asia",
     "continentAU": "Australia"
+  },
+  "lobby": {
+    "title": "LAN flerspiller",
+    "tabLabel": "LAN",
+    "tabHost": "Vert",
+    "tabJoin": "Bli med",
+    "admin": "Admin",
+    "ready": "Klar",
+    "waiting": "Venter…",
+    "disconnected": "Frakoblet",
+    "noPlayers": "Ingen spillere ennå",
+    "players": "Spillere",
+    "startGame": "Start spill",
+    "markReady": "Jeg er klar",
+    "waitingForAdmin": "Venter på at verten starter…",
+    "waitingForServer": "Kobler til server…",
+    "serverIP": "Server IP-adresse",
+    "port": "Port",
+    "yourName": "Ditt navn",
+    "namePlaceholder": "Skriv inn navn",
+    "defaultName": "Spiller",
+    "connect": "Koble til",
+    "connectionFailed": "Klarte ikke koble til — sjekk IP-adressen og prøv igjen.",
+    "orEnterManually": "Eller skriv inn manuelt:",
+    "scanToJoin": "Skann for å bli med",
+    "playerDroppedTitle": "Spiller koblet fra",
+    "playerDroppedMessage": "En spiller falt ut. Gi dem til KI eller sett spillet på pause og vent.",
+    "handToAI": "Gi til KI",
+    "pauseGame": "Pause og vent",
+    "hostHint": "Koble til spillserveren som kjører på laptopen. Den første spilleren som kobler til blir admin.",
+    "connectAsHost": "Koble til som vert",
+    "localBadge": "LOKAL",
+    "showQr": "Vis QR-kode",
+    "tapToEnlarge": "Trykk for å forstørre"
   },
   "world": {
     "title": "Verden",

@@ -7,7 +7,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:web": "expo export --platform web"
+    "build:web": "expo export --platform web",
+    "server": "ts-node --project server/tsconfig.json server/index.ts",
+    "server:watch": "ts-node-dev --project server/tsconfig.json --respawn server/index.ts",
+    "dev": "concurrently --names \"expo,server\" --prefix-colors \"cyan,yellow\" \"expo start\" \"ts-node-dev --project server/tsconfig.json --respawn server/index.ts\""
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -26,16 +29,22 @@
     "react-dom": "19.2.7",
     "react-native": "0.76.9",
     "react-native-gesture-handler": "~2.24.0",
+    "react-native-qrcode-svg": "^6.3.21",
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-svg": "15.11.2",
     "react-native-web": "^0.20.0",
-    "tailwindcss": "^3.4.19"
+    "tailwindcss": "^3.4.19",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.2.17",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^10.0.3",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
     "typescript": "^5.3.3"
   }
 }

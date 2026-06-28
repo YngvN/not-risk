@@ -2,7 +2,8 @@
   "home": {
     "title": "fRISKy",
     "welcome": "World domination awaits.",
-    "description": "A Risk-inspired strategy game."
+    "description": "A Risk-inspired strategy game.",
+    "newLanGame": "New LAN Game"
   },
   "components": {
     "title": "Components",
@@ -166,6 +167,40 @@
     "continentAF": "Africa",
     "continentAS": "Asia",
     "continentAU": "Australia"
+  },
+  "lobby": {
+    "title": "LAN Multiplayer",
+    "tabLabel": "LAN",
+    "tabHost": "Host",
+    "tabJoin": "Join",
+    "admin": "Admin",
+    "ready": "Ready",
+    "waiting": "Waiting…",
+    "disconnected": "Disconnected",
+    "noPlayers": "No players yet",
+    "players": "Players",
+    "startGame": "Start Game",
+    "markReady": "I'm ready",
+    "waitingForAdmin": "Waiting for the host to start…",
+    "waitingForServer": "Connecting to server…",
+    "serverIP": "Server IP address",
+    "port": "Port",
+    "yourName": "Your name",
+    "namePlaceholder": "Enter your name",
+    "defaultName": "Player",
+    "connect": "Connect",
+    "connectionFailed": "Could not connect — check the IP and try again.",
+    "orEnterManually": "Or enter manually:",
+    "scanToJoin": "Scan to join",
+    "playerDroppedTitle": "Player disconnected",
+    "playerDroppedMessage": "A player dropped. Hand them to the AI or pause and wait for them to reconnect.",
+    "handToAI": "Hand to AI",
+    "pauseGame": "Pause & wait",
+    "hostHint": "Connect to the game server running on your laptop. The first player to connect becomes admin.",
+    "connectAsHost": "Connect as Host",
+    "localBadge": "LOCAL",
+    "showQr": "Show QR Code",
+    "tapToEnlarge": "Tap to enlarge"
   },
   "world": {
     "title": "World",

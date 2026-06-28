@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "./**/*.ts",
+    "../src/engine/**/*.ts",
+    "../src/ai/**/*.ts",
+    "../src/constants/**/*.ts",
+    "../src/locales/**/*.ts",
+    "../src/locales/**/*.json"
+  ]
+}

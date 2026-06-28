@@ -1,0 +1,135 @@
+import type { PlayerId, PlayerColor } from '../src/engine/types';
+import type { LobbyPlayer, ServerMsg } from './types';
+
+const MAX_PLAYERS = 6;
+const RECONNECT_TIMEOUT_MS = 60_000;
+
+interface Slot {
+  player: LobbyPlayer;
+  reconnectTimer?: ReturnType<typeof setTimeout>;
+}
+
+/** Manages pre-game lobby state: player slots, ready flags, and admin role. */
+export class LobbyManager {
+  private readonly slots = new Map<PlayerId, Slot>();
+  private nextId = 1;
+
+  private readonly _send: (playerId: PlayerId, msg: ServerMsg) => void;
+  private readonly _broadcast: (msg: ServerMsg) => void;
+
+  constructor(
+    send: (playerId: PlayerId, msg: ServerMsg) => void,
+    broadcast: (msg: ServerMsg) => void,
+  ) {
+    this._send = send;
+    this._broadcast = broadcast;
+  }
+
+  /** Clears all slots and resets the ID counter for a fresh lobby. */
+  reset(): void {
+    for (const { reconnectTimer } of this.slots.values()) {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    }
+    this.slots.clear();
+    this.nextId = 1;
+  }
+
+  get isFull(): boolean { return this.slots.size >= MAX_PLAYERS; }
+  get adminId(): PlayerId | null {
+    for (const [id, { player }] of this.slots) {
+      if (player.isAdmin) return id;
+    }
+    return null;
+  }
+  get players(): LobbyPlayer[] {
+    return Array.from(this.slots.values()).map(s => s.player);
+  }
+
+  /**
+   * Registers a new player and sends them a WELCOME message.
+   * Returns the assigned PlayerId, or null if the lobby is full.
+   */
+  join(name: string, color: PlayerColor, serverIp: string, serverPort: number): PlayerId | null {
+    if (this.isFull) return null;
+
+    const id: PlayerId = `p${this.nextId++}`;
+    const isAdmin = this.slots.size === 0;
+    this.slots.set(id, { player: { id, name, color, isAdmin, isReady: false, connected: true } });
+
+    this._send(id, { type: 'WELCOME', yourId: id, isAdmin, serverIp, serverPort });
+    this._broadcast({ type: 'LOBBY', players: this.players });
+    return id;
+  }
+
+  setReady(playerId: PlayerId): void {
+    const slot = this.slots.get(playerId);
+    if (!slot) return;
+    slot.player.isReady = true;
+    this._broadcast({ type: 'LOBBY', players: this.players });
+  }
+
+  /**
+   * Marks a player as disconnected and starts a reconnect timer for admins.
+   * `onAdminExpired` is called if the admin never reconnects within the window.
+   */
+  disconnect(playerId: PlayerId, onAdminExpired: (newAdminId: PlayerId | null) => void): void {
+    const slot = this.slots.get(playerId);
+    if (!slot) return;
+
+    slot.player.connected = false;
+    this._broadcast({ type: 'PLAYER_DROPPED', playerId, isAdmin: slot.player.isAdmin, waitSeconds: RECONNECT_TIMEOUT_MS / 1000 });
+    this._broadcast({ type: 'LOBBY', players: this.players });
+
+    if (slot.player.isAdmin) {
+      slot.reconnectTimer = setTimeout(() => {
+        this.slots.delete(playerId);
+        const newAdmin = this.promoteNextAdmin();
+        onAdminExpired(newAdmin);
+      }, RECONNECT_TIMEOUT_MS);
+    }
+  }
+
+  /** Re-attaches a returning player and cancels any pending eviction timer. */
+  reconnect(playerId: PlayerId): boolean {
+    const slot = this.slots.get(playerId);
+    if (!slot) return false;
+
+    if (slot.reconnectTimer) {
+      clearTimeout(slot.reconnectTimer);
+      slot.reconnectTimer = undefined;
+    }
+    slot.player.connected = true;
+    this._broadcast({ type: 'PLAYER_RECONNECTED', playerId });
+    this._broadcast({ type: 'LOBBY', players: this.players });
+    return true;
+  }
+
+  /**
+   * Immediately removes a player from the lobby (used for pre-game disconnects).
+   * Promotes a new admin if the removed player was admin.
+   * Returns the new admin ID if promotion happened, null if lobby is now empty.
+   */
+  removePlayer(playerId: PlayerId): PlayerId | null {
+    const slot = this.slots.get(playerId);
+    if (!slot) return this.adminId;
+    if (slot.reconnectTimer) clearTimeout(slot.reconnectTimer);
+    const wasAdmin = slot.player.isAdmin;
+    this.slots.delete(playerId);
+    if (this.slots.size === 0) return null;
+    if (wasAdmin) return this.promoteNextAdmin();
+    this._broadcast({ type: 'LOBBY', players: this.players });
+    return this.adminId;
+  }
+
+  private promoteNextAdmin(): PlayerId | null {
+    for (const [id, slot] of this.slots) {
+      if (slot.player.connected) {
+        slot.player.isAdmin = true;
+        this._broadcast({ type: 'HOST_CHANGED', newAdminId: id });
+        this._broadcast({ type: 'LOBBY', players: this.players });
+        return id;
+      }
+    }
+    return null;
+  }
+}

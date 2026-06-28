@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameState, GameAction, PlayerColor, GameMode, GameRules } from '../engine/types';
 import { DEFAULT_RULES } from '../engine/types';
@@ -21,10 +21,15 @@ export const PLAYER_COLOR_HEX: Record<PlayerColor, string> = {
 interface GameContextValue {
   state: GameState | null;
   hasSavedGame: boolean;
+  multiplayerMode: 'none' | 'multiplayer';
   dispatch: (action: GameAction) => void;
   startGame: (playerConfigs: PlayerConfig[], mode?: GameMode, setupMode?: SetupMode, randomPlacement?: boolean, rules?: GameRules) => void;
   resetGame: () => void;
   resumeGame: () => Promise<void>;
+  /** Called by MultiplayerContext to push authoritative server state into the game. */
+  applyNetworkState: (state: GameState) => void;
+  /** Pass a send function to route dispatch over the network, or null to go back to local. */
+  setMultiplayerDispatch: (fn: ((action: GameAction) => void) | null) => void;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -32,6 +37,9 @@ const GameContext = createContext<GameContextValue | null>(null);
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState | null>(null);
   const [hasSavedGame, setHasSavedGame] = useState(false);
+  const [multiplayerMode, setMultiplayerMode] = useState<'none' | 'multiplayer'>('none');
+  // When set, dispatch sends over the network instead of running locally.
+  const networkDispatch = useRef<((action: GameAction) => void) | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(SAVE_KEY).then(raw => setHasSavedGame(raw !== null));
@@ -45,12 +53,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [state]);
 
   const dispatch = useCallback((action: GameAction) => {
-    setState(prev => (prev ? engineDispatch(action, prev) : prev));
+    if (networkDispatch.current) {
+      networkDispatch.current(action);
+    } else {
+      setState(prev => (prev ? engineDispatch(action, prev) : prev));
+    }
   }, []);
 
-  // AI turn runner: fires whenever state changes and the active player is an AI.
+  // AI turn runner: fires only in local (non-multiplayer) mode.
+  // In multiplayer mode, the server runs AI turns.
   useEffect(() => {
     if (!state || state.phase === 'GAME_OVER') return;
+    if (multiplayerMode === 'multiplayer') return;
     const activePlayer = state.players.find(p => p.id === state.activePlayerId);
     if (!activePlayer?.isAI) return;
 
@@ -64,7 +78,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [state, dispatch]);
+  }, [state, dispatch, multiplayerMode]);
 
   const startGame = useCallback((
     playerConfigs: PlayerConfig[],
@@ -87,8 +101,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (raw) setState(JSON.parse(raw) as GameState);
   }, []);
 
+  const applyNetworkState = useCallback((newState: GameState) => {
+    setState(newState);
+  }, []);
+
+  const setMultiplayerDispatch = useCallback((fn: ((action: GameAction) => void) | null) => {
+    networkDispatch.current = fn;
+    setMultiplayerMode(fn ? 'multiplayer' : 'none');
+  }, []);
+
   return (
-    <GameContext.Provider value={{ state, hasSavedGame, dispatch, startGame, resetGame, resumeGame }}>
+    <GameContext.Provider value={{
+      state, hasSavedGame, multiplayerMode,
+      dispatch, startGame, resetGame, resumeGame,
+      applyNetworkState, setMultiplayerDispatch,
+    }}>
       {children}
     </GameContext.Provider>
   );

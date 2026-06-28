@@ -81,6 +81,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="lobby"
+        options={{
+          title: t('lobby.tabLabel'),
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="wifi-outline" color={color} size={size} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
