@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "expo-template",
-    "slug": "expo-template",
+    "name": "fRISKy",
+    "slug": "frisky",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "expo-template",
+    "scheme": "frisky",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash.png",

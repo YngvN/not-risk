@@ -1,12 +1,12 @@
 import React from 'react';
-import { Text as RNText, TextProps as RNTextProps } from 'react-native';
+import { Text as RNText, TextProps as RNTextProps, TextStyle } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import { FontSize, FontWeight } from '../../constants/spacing';
 
 /** Visual scale applied per variant. */
 export type TextVariant = 'h1' | 'h2' | 'h3' | 'body' | 'label' | 'caption';
 
-const variantStyles: Record<TextVariant, { fontSize: number; fontWeight: string }> = {
+const variantStyles: Record<TextVariant, { fontSize: number; fontWeight: TextStyle['fontWeight'] }> = {
   h1: { fontSize: FontSize.xxl, fontWeight: FontWeight.bold },
   h2: { fontSize: FontSize.xl, fontWeight: FontWeight.semibold },
   h3: { fontSize: FontSize.lg, fontWeight: FontWeight.semibold },

@@ -7,6 +7,7 @@ import { Spacing, BorderRadius } from '../../constants/spacing';
 import type { GameEvent, Player, TerritoryId } from '../../engine/types';
 import { TERRITORIES } from '../../constants/riskWorldTerritories';
 import { PLAYER_COLOR_HEX } from '../../context/GameContext';
+import { missionDescription } from '../../engine/missions';
 import type { TranslationKey } from '../../locales';
 
 // ── Event formatting ─────────────────────────────────────────────────────────
@@ -99,7 +100,8 @@ function parseEvent(
 
     case 'GAME_OVER': {
       const winner = players.find(p => p.id === event.payload.winner);
-      return { text: `${winner?.name ?? name} wins!`, territories: [] };
+      const mDesc = winner?.mission ? ` · ${missionDescription(winner.mission)}` : '';
+      return { text: `${winner?.name ?? name} wins!${mDesc}`, territories: [] };
     }
 
     default:

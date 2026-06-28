@@ -9,6 +9,7 @@ import { RiskBoardMap, TERRITORY_LABEL_POS } from '../../src/components/map/Risk
 import {
   DiceModal, ActionPanel, CardHandModal,
   PassDeviceScreen, MissionCard, GameSidePanel, GameSlidePanel,
+  ContinentLegend,
   type SelectionMode,
 } from '../../src/components/game';
 import { useGame, PLAYER_COLOR_HEX } from '../../src/context/GameContext';
@@ -17,6 +18,7 @@ import { useLanguage } from '../../src/hooks/useLanguage';
 import { Spacing, BorderRadius } from '../../src/constants/spacing';
 import type { PlayerColor, TerritoryId, GameMode, GameRules, AIDifficulty } from '../../src/engine/types';
 import { DEFAULT_RULES } from '../../src/engine/types';
+import { missionDescription } from '../../src/engine/missions';
 import { TERRITORIES, type Territory } from '../../src/constants/riskWorldTerritories';
 import { areAdjacent, getConnectedOwned, getAdjacentIds } from '../../src/engine/board';
 import type { PlayerConfig, SetupMode } from '../../src/engine/setup';
@@ -129,43 +131,76 @@ function useArmyDeltas(st: ReturnType<typeof useGame>['state']) {
 
 // ── Setup screen ─────────────────────────────────────────────────────────────
 
+interface PlayerEntry {
+  name: string;
+  color: PlayerColor;
+  isAI: boolean;
+  difficulty: AIDifficulty;
+}
+
 function SetupScreen() {
   const { startGame, hasSavedGame, resumeGame } = useGame();
   const { colors } = useTheme();
   const { t } = useLanguage();
 
-  const [playerCount, setPlayerCount] = useState(3);
-  const [names, setNames] = useState<string[]>(DEFAULT_NAMES);
-  const [selectedColors, setSelectedColors] = useState<PlayerColor[]>(['red', 'blue', 'green', 'yellow', 'black', 'pink']);
+  const [players, setPlayers] = useState<PlayerEntry[]>([
+    { name: DEFAULT_NAMES[0], color: 'red',  isAI: false, difficulty: 'medium' },
+    { name: DEFAULT_NAMES[1], color: 'blue', isAI: false, difficulty: 'medium' },
+  ]);
+  const [lastAIDifficulty, setLastAIDifficulty] = useState<AIDifficulty>('medium');
   const [gameMode, setGameMode] = useState<GameMode>('classic');
   const [randomDeal, setRandomDeal] = useState(false);
   const [randomPlacement, setRandomPlacement] = useState(false);
   const [rules, setRules] = useState<GameRules>(DEFAULT_RULES);
-  const [playerIsAI, setPlayerIsAI] = useState<boolean[]>(Array(6).fill(false));
-  const [playerDifficulty, setPlayerDifficulty] = useState<AIDifficulty[]>(Array(6).fill('medium' as AIDifficulty));
 
   const toggleRule = <K extends keyof GameRules>(key: K, value: GameRules[K]) =>
     setRules(r => ({ ...r, [key]: value }));
 
-  const toggleAI = (i: number) => {
-    setPlayerIsAI(prev => { const n = [...prev]; n[i] = !n[i]; return n; });
+  const takenColors = (excludeIdx: number) =>
+    players.filter((_, j) => j !== excludeIdx).map(p => p.color);
+
+  const nextFreeColor = (): PlayerColor =>
+    ALL_COLORS.find(c => !players.some(p => p.color === c)) ?? ALL_COLORS[0];
+
+  const addHuman = () => {
+    if (players.length >= 6) return;
+    const idx = players.length;
+    setPlayers(prev => [...prev, {
+      name: DEFAULT_NAMES[idx] ?? `Player ${idx + 1}`,
+      color: nextFreeColor(),
+      isAI: false,
+      difficulty: 'medium',
+    }]);
   };
-  const setDifficulty = (i: number, d: AIDifficulty) => {
-    setPlayerDifficulty(prev => { const n = [...prev]; n[i] = d; return n; });
+
+  const addAI = () => {
+    if (players.length >= 6) return;
+    setPlayers(prev => [...prev, {
+      name: t('game.aiLabel'),
+      color: nextFreeColor(),
+      isAI: true,
+      difficulty: lastAIDifficulty,
+    }]);
+  };
+
+  const removePlayer = (i: number) => {
+    if (players.length <= 2) return;
+    setPlayers(prev => prev.filter((_, j) => j !== i));
+  };
+
+  const updatePlayer = (i: number, patch: Partial<PlayerEntry>) => {
+    setPlayers(prev => prev.map((p, j) => j === i ? { ...p, ...patch } : p));
+    if (patch.difficulty !== undefined) setLastAIDifficulty(patch.difficulty);
   };
 
   const handleStart = () => {
-    const configs: PlayerConfig[] = Array.from({ length: playerCount }, (_, i) => ({
-      name: names[i] || `Player ${i + 1}`,
-      color: selectedColors[i],
-      isAI: playerIsAI[i],
-      aiDifficulty: playerIsAI[i] ? playerDifficulty[i] : undefined,
+    const configs: PlayerConfig[] = players.map(p => ({
+      name: p.name || t('game.humanLabel'),
+      color: p.color,
+      isAI: p.isAI,
+      aiDifficulty: p.isAI ? p.difficulty : undefined,
     }));
     startGame(configs, gameMode, randomDeal ? 'random' : 'claim', randomPlacement, rules);
-  };
-
-  const pickColor = (playerIdx: number, color: PlayerColor) => {
-    setSelectedColors(prev => { const n = [...prev]; n[playerIdx] = color; return n; });
   };
 
   const MODES: { id: GameMode; labelKey: Parameters<typeof t>[0] }[] = [
@@ -198,16 +233,6 @@ function SetupScreen() {
         ))}
       </View>
 
-      {/* Player count */}
-      <Text variant="body" style={{ color: colors.textSecondary, marginBottom: Spacing.xs }}>{t('game.playerCount')}</Text>
-      <View style={[styles.countRow, { marginBottom: Spacing.lg }]}>
-        {[2, 3, 4, 5, 6].map(n => (
-          <Pressable key={n} onPress={() => setPlayerCount(n)} style={[styles.countBtn, { backgroundColor: playerCount === n ? colors.primary : colors.surface, borderColor: colors.border }]}>
-            <Text variant="body" style={{ color: playerCount === n ? '#fff' : colors.text }}>{n}</Text>
-          </Pressable>
-        ))}
-      </View>
-
       {/* Setup options */}
       <Text variant="body" style={{ color: colors.textSecondary, marginBottom: Spacing.xs }}>{t('game.setupModeLabel')}</Text>
       <View style={{ marginBottom: Spacing.lg, gap: Spacing.sm }}>
@@ -224,49 +249,76 @@ function SetupScreen() {
       </View>
 
       {/* Per-player config */}
-      {Array.from({ length: playerCount }, (_, i) => (
-        <View key={i} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.playerColorDot, { backgroundColor: PLAYER_COLOR_HEX[selectedColors[i]] }]} />
+      <Text variant="body" style={{ color: colors.textSecondary, marginBottom: Spacing.xs }}>
+        {t('game.playerCount')}  {players.length}/6
+      </Text>
+
+      {players.map((player, i) => (
+        <View key={i} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: player.isAI ? colors.primary : colors.border }]}>
+          <View style={[styles.playerColorDot, { backgroundColor: PLAYER_COLOR_HEX[player.color] }]} />
           <View style={{ flex: 1, gap: Spacing.xs }}>
-            <TextInput
-              value={names[i]}
-              onChangeText={text => setNames(prev => { const n = [...prev]; n[i] = text; return n; })}
-              style={[styles.nameInput, { color: colors.text, borderColor: colors.border }]}
-              placeholder={`Player ${i + 1}`}
-              placeholderTextColor={colors.textSecondary}
-            />
-            <View style={styles.colorPicker}>
-              {ALL_COLORS.filter(c => !selectedColors.includes(c) || selectedColors[i] === c).map(color => (
-                <Pressable key={color} onPress={() => pickColor(i, color)} style={[styles.colorSwatch, { backgroundColor: PLAYER_COLOR_HEX[color], borderWidth: selectedColors[i] === color ? 2 : 0, borderColor: colors.text }]} />
-              ))}
-            </View>
-            {/* AI toggle + difficulty */}
-            <View style={styles.aiRow}>
-              <Pressable
-                onPress={() => toggleAI(i)}
-                style={[styles.aiToggle, { backgroundColor: playerIsAI[i] ? colors.primary : colors.surface, borderColor: colors.border }]}
-              >
-                <Text variant="caption" style={{ color: playerIsAI[i] ? '#fff' : colors.text, fontWeight: '700' }}>
-                  {playerIsAI[i] ? t('game.aiLabel') : t('game.humanLabel')}
-                </Text>
-              </Pressable>
-              {playerIsAI[i] && (['easy', 'medium', 'hard'] as AIDifficulty[]).map(d => (
-                <Pressable
-                  key={d}
-                  onPress={() => setDifficulty(i, d)}
-                  style={[styles.diffBtn, { backgroundColor: playerDifficulty[i] === d ? colors.primary : colors.surface, borderColor: colors.border }]}
-                >
-                  <Text variant="caption" style={{ color: playerDifficulty[i] === d ? '#fff' : colors.text }}>
-                    {t(`game.aiDifficulty${d.charAt(0).toUpperCase() + d.slice(1)}` as Parameters<typeof t>[0])}
-                  </Text>
+            <View style={styles.playerCardHeader}>
+              <TextInput
+                value={player.name}
+                onChangeText={text => updatePlayer(i, { name: text })}
+                style={[styles.nameInput, { color: colors.text, borderColor: colors.border, flex: 1 }]}
+                placeholder={player.isAI ? t('game.aiLabel') : `Player ${i + 1}`}
+                placeholderTextColor={colors.textSecondary}
+              />
+              {players.length > 2 && (
+                <Pressable onPress={() => removePlayer(i)} style={[styles.removeBtn, { borderColor: colors.border }]}>
+                  <Text variant="caption" style={{ color: colors.textSecondary, lineHeight: 16 }}>✕</Text>
                 </Pressable>
+              )}
+            </View>
+            <View style={styles.colorPicker}>
+              {ALL_COLORS.filter(c => !takenColors(i).includes(c)).map(color => (
+                <Pressable
+                  key={color}
+                  onPress={() => updatePlayer(i, { color })}
+                  style={[styles.colorSwatch, { backgroundColor: PLAYER_COLOR_HEX[color], borderWidth: player.color === color ? 2 : 0, borderColor: colors.text }]}
+                />
               ))}
             </View>
+            {/* Difficulty row (AI players only) */}
+            {player.isAI && (
+              <View style={styles.aiRow}>
+                {(['easy', 'medium', 'hard'] as AIDifficulty[]).map(d => (
+                  <Pressable
+                    key={d}
+                    onPress={() => updatePlayer(i, { difficulty: d })}
+                    style={[styles.diffBtn, { backgroundColor: player.difficulty === d ? colors.primary : colors.surface, borderColor: colors.border }]}
+                  >
+                    <Text variant="caption" style={{ color: player.difficulty === d ? '#fff' : colors.text }}>
+                      {t(`game.aiDifficulty${d.charAt(0).toUpperCase() + d.slice(1)}` as Parameters<typeof t>[0])}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
         </View>
       ))}
 
-      <Pressable onPress={handleStart} style={[styles.startBtn, { backgroundColor: colors.primary, marginTop: Spacing.lg }]}>
+      {/* Add player buttons */}
+      {players.length < 6 && (
+        <View style={[styles.addRow, { marginBottom: Spacing.sm }]}>
+          <Pressable
+            onPress={addHuman}
+            style={[styles.addBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
+            <Text variant="body" style={{ color: colors.text, fontWeight: '600' }}>+ {t('game.humanLabel')}</Text>
+          </Pressable>
+          <Pressable
+            onPress={addAI}
+            style={[styles.addBtn, { backgroundColor: colors.surface, borderColor: colors.primary }]}
+          >
+            <Text variant="body" style={{ color: colors.primary, fontWeight: '600' }}>+ {t('game.aiLabel')}</Text>
+          </Pressable>
+        </View>
+      )}
+
+      <Pressable onPress={handleStart} style={[styles.startBtn, { backgroundColor: colors.primary, marginTop: Spacing.sm }]}>
         <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('game.startGame')}</Text>
       </Pressable>
     </Screen>
@@ -366,22 +418,85 @@ function GameOverScreen() {
   const { colors } = useTheme();
   const { t } = useLanguage();
   if (!state) return null;
+
   const winner = state.players.find(p => p.id === state.winner);
+  const winnerColor = winner ? PLAYER_COLOR_HEX[winner.color] : colors.primary;
+  const mission = winner?.mission ?? null;
+  const isMissionVictory = state.mode === 'mission' && !!mission;
+  const desc = mission ? missionDescription(mission) : null;
+
   return (
     <Screen>
+      {/* Player-color accent bar */}
+      <View style={[styles.gameOverBar, { backgroundColor: winnerColor }]} />
+
       <View style={styles.center}>
-        {winner && <View style={[styles.winnerDot, { backgroundColor: PLAYER_COLOR_HEX[winner.color] }]} />}
-        <Text variant="h2" style={{ color: colors.text, textAlign: 'center' }}>
-          {winner ? t('game.winner').replace('{{name}}', winner.name) : 'Game Over'}
-        </Text>
-        {winner?.mission && (
-          <View style={[styles.missionBadge, { backgroundColor: colors.success }]}>
-            <Text variant="caption" style={{ color: '#fff', textAlign: 'center' }}>{winner.mission.type}</Text>
-          </View>
+        {/* Winner orb */}
+        <MotiView
+          from={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', damping: 13, stiffness: 150 }}
+        >
+          <View style={[styles.winnerDot, { backgroundColor: winnerColor }]} />
+        </MotiView>
+
+        {/* Name + mode label */}
+        <MotiView
+          from={{ opacity: 0, translateY: 6 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 380, delay: 200 }}
+          style={{ alignItems: 'center', gap: Spacing.xs }}
+        >
+          <Text variant="caption" style={{ color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1.5 }}>
+            {isMissionVictory ? t('game.secretMission') : t('game.modeClassic')}
+          </Text>
+          <Text variant="h2" style={{ color: colors.text, textAlign: 'center' }}>
+            {winner ? t('game.winner').replace('{{name}}', winner.name) : 'Game Over'}
+          </Text>
+        </MotiView>
+
+        {/* Mission reveal card */}
+        {isMissionVictory && desc && (
+          <MotiView
+            from={{ opacity: 0, translateY: 28 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'spring', damping: 16, stiffness: 160, delay: 450 }}
+            style={[styles.missionRevealCard, { backgroundColor: colors.card, borderColor: colors.success }]}
+          >
+            <View style={[styles.missionRevealBand, { backgroundColor: colors.success }]}>
+              <Text variant="caption" style={{ color: '#fff', fontWeight: '700', letterSpacing: 0.5 }}>
+                {'✓  '}{t('game.missionComplete')}
+              </Text>
+            </View>
+            <View style={styles.missionRevealBody}>
+              <Text variant="body" style={{ color: colors.text, textAlign: 'center', fontWeight: '600', lineHeight: 24 }}>
+                {desc}
+              </Text>
+              {mission.type === 'DESTROY_PLAYER' && mission.targetColor && (
+                <View style={styles.targetRow}>
+                  <View style={[styles.targetDot, { backgroundColor: PLAYER_COLOR_HEX[mission.targetColor] }]} />
+                  <Text variant="caption" style={{ color: colors.textSecondary }}>
+                    {t('game.targetPlayer').replace('{{color}}', mission.targetColor)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </MotiView>
         )}
-        <Pressable onPress={resetGame} style={[styles.startBtn, { backgroundColor: colors.primary, marginTop: Spacing.lg }]}>
-          <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('game.playAgain')}</Text>
-        </Pressable>
+
+        {/* Play again */}
+        <MotiView
+          from={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ type: 'timing', duration: 300, delay: isMissionVictory ? 750 : 350 }}
+        >
+          <Pressable
+            onPress={resetGame}
+            style={[styles.startBtn, { backgroundColor: colors.primary, marginTop: Spacing.lg, minWidth: 200 }]}
+          >
+            <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('game.playAgain')}</Text>
+          </Pressable>
+        </MotiView>
       </View>
     </Screen>
   );
@@ -474,7 +589,7 @@ function PlayScreen() {
   }, [st.phase, st.setupSubPhase]);
 
   React.useEffect(() => {
-    if (state?.lastBattleResult) setShowDice(true);
+    if (state?.lastBattleResult && !activePlayer.isAI) setShowDice(true);
   }, [state?.lastBattleResult]);
 
   // Auto-show confirmation modal when all reinforcements are placed (human players only)
@@ -739,6 +854,8 @@ function PlayScreen() {
           />
         </ZoomableMap>
 
+        <ContinentLegend />
+
         {/* Wide-screen sidebar — always shown */}
         {isWide && (
           <View style={styles.logSidebar}>
@@ -771,7 +888,6 @@ function PlayScreen() {
       <DiceModal
         result={showDice ? st.lastBattleResult : null}
         onDismiss={() => setShowDice(false)}
-        autoClose={activePlayer.isAI ? 1600 : undefined}
       />
 
       <CardHandModal
@@ -864,23 +980,30 @@ export default function GameScreen() {
 
 const styles = StyleSheet.create({
   countRow:      { flexDirection: 'row', gap: Spacing.sm },
-  countBtn:      { width: 44, height: 44, borderRadius: BorderRadius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   modeBtn:       { flex: 1, paddingVertical: Spacing.sm, borderRadius: BorderRadius.md, borderWidth: 1, alignItems: 'center' },
   checkboxRow:   { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   checkboxBox:   { width: 22, height: 22, borderRadius: 4, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  playerCard:    { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, gap: Spacing.md },
-  playerColorDot:{ width: 24, height: 24, borderRadius: 12 },
-  nameInput:     { borderWidth: 1, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, fontSize: 16 },
-  colorPicker:   { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap' },
-  colorSwatch:   { width: 24, height: 24, borderRadius: 12 },
-  aiRow:         { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap', alignItems: 'center' },
-  aiToggle:      { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 3 },
-  diffBtn:       { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 3 },
+  playerCard:      { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, gap: Spacing.md },
+  playerCardHeader:{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  playerColorDot:  { width: 24, height: 24, borderRadius: 12, marginTop: 10 },
+  nameInput:       { borderWidth: 1, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, fontSize: 16 },
+  removeBtn:       { width: 28, height: 28, borderRadius: BorderRadius.sm, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  colorPicker:     { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap' },
+  colorSwatch:     { width: 24, height: 24, borderRadius: 12 },
+  aiRow:           { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap', alignItems: 'center' },
+  diffBtn:         { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 3 },
+  addRow:          { flexDirection: 'row', gap: Spacing.sm },
+  addBtn:          { flex: 1, borderRadius: BorderRadius.md, borderWidth: 1, paddingVertical: Spacing.sm, alignItems: 'center' },
   startBtn:      { borderRadius: BorderRadius.md, paddingVertical: Spacing.md, alignItems: 'center' },
   resumeBtn:     { borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center', borderWidth: 1, marginBottom: Spacing.md },
-  center:        { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
-  winnerDot:     { width: 64, height: 64, borderRadius: 32, marginBottom: Spacing.md },
-  missionBadge:  { borderRadius: BorderRadius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs },
+  center:            { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
+  winnerDot:         { width: 72, height: 72, borderRadius: 36, marginBottom: Spacing.sm },
+  gameOverBar:       { height: 5, width: '100%' },
+  missionRevealCard: { borderRadius: BorderRadius.lg, borderWidth: 2, overflow: 'hidden', width: '100%', maxWidth: 320 },
+  missionRevealBand: { paddingVertical: Spacing.sm, alignItems: 'center' },
+  missionRevealBody: { padding: Spacing.lg, gap: Spacing.sm, alignItems: 'center' },
+  targetRow:         { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  targetDot:         { width: 12, height: 12, borderRadius: 6 },
   missionBtn:    { borderBottomWidth: 1, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, alignItems: 'flex-end' },
   topBarActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: Spacing.xs, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs },
   topChip:       { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 4 },

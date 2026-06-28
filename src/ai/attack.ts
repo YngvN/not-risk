@@ -1,6 +1,6 @@
 import type { GameState, GameAction, TerritoryId, AIDifficulty } from '../engine/types';
 import { getContinentTerritories, getAdjacentIds, CONTINENT_BONUSES } from '../engine/board';
-import { CONTINENT_PRIORITY } from './evaluate';
+import { CONTINENT_PRIORITY, getMissionDirective } from './evaluate';
 import { captureProb } from './dice';
 import type { ContinentId } from '../constants/riskWorldTerritories';
 
@@ -31,13 +31,50 @@ function scoreAttack(
   const prob = captureProb(state.territories[from].armies, state.territories[to].armies);
   let score = prob * 10;
 
+  // ── Mission-aware bonus ───────────────────────────────────────────────────────
+  const directive = getMissionDirective(state, playerId);
+  if (directive) {
+    switch (directive.type) {
+      case 'destroy': {
+        // Heavily prioritise attacking the target player's territories
+        if (state.territories[to]?.owner === directive.targetPlayerId) score += 40;
+        break;
+      }
+      case 'continents': {
+        // Extra bonus for territories in mission-required continents, on top of
+        // the generic continent-completion bonus below
+        for (const mc of directive.targets) {
+          const cTerrs = getContinentTerritories(mc);
+          if (!cTerrs.includes(to)) continue;
+          const ours = cTerrs.filter(id => state.territories[id as TerritoryId]?.owner === playerId).length;
+          const total = cTerrs.length;
+          if (ours === total - 1) {
+            score += 35; // one territory away from completing a mission continent
+          } else {
+            score += (ours / total) * 12;
+          }
+          break;
+        }
+        break;
+      }
+      case 'territory_count':
+        // Any capture advances the mission; add a small flat bonus
+        score += 4;
+        break;
+      case 'territories_with_armies':
+        // Capturing adds a territory we can then reinforce to 2 armies
+        score += 3;
+        break;
+    }
+  }
+
+  // ── Generic continent-completion bonus ────────────────────────────────────────
   for (const c of CONTINENT_PRIORITY) {
     const cTerrs = getContinentTerritories(c);
     if (!cTerrs.includes(to)) continue;
     const ours = cTerrs.filter(id => state.territories[id as TerritoryId]?.owner === playerId).length;
     const total = cTerrs.length;
     if (ours === total - 1) {
-      // One away from completing the continent — very high priority
       score += (CONTINENT_BONUSES[c as ContinentId] ?? 0) * 20;
     } else {
       score += (ours / total) * (CONTINENT_BONUSES[c as ContinentId] ?? 0) * 5;
@@ -51,7 +88,12 @@ function scoreAttack(
 interface Candidate { from: TerritoryId; to: TerritoryId; score: number; prob: number }
 
 function findAttacks(state: GameState, playerId: string, difficulty: AIDifficulty): Candidate[] {
-  const threshold = CAPTURE_THRESHOLD[difficulty];
+  const directive = getMissionDirective(state, playerId);
+
+  // For destroy missions use a looser threshold — we must chase the target player
+  // even when the odds are not ideal.
+  const baseThreshold = CAPTURE_THRESHOLD[difficulty];
+
   const candidates: Candidate[] = [];
 
   for (const ts of Object.values(state.territories)) {
@@ -59,8 +101,16 @@ function findAttacks(state: GameState, playerId: string, difficulty: AIDifficult
     for (const adjId of getAdjacentIds(ts.id as TerritoryId)) {
       const adj = state.territories[adjId as TerritoryId];
       if (!adj || adj.owner === playerId || adj.owner === null) continue;
+
       const prob = captureProb(ts.armies, adj.armies);
+
+      // For destroy missions, allow attacking the target even at lower odds
+      const isTargetTerritory =
+        directive?.type === 'destroy' && adj.owner === directive.targetPlayerId;
+      const threshold = isTargetTerritory ? Math.min(baseThreshold, 0.45) : baseThreshold;
+
       if (prob < threshold) continue;
+
       candidates.push({
         from: ts.id as TerritoryId,
         to: adjId as TerritoryId,

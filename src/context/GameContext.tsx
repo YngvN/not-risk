@@ -54,11 +54,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const activePlayer = state.players.find(p => p.id === state.activePlayerId);
     if (!activePlayer?.isAI) return;
 
-    // Give extra time after a capture so the DiceModal can animate in and show.
-    const delay = state.captureContext ? 1600
-      : state.phase === 'SETUP' ? 350
+    const delay = state.phase === 'SETUP' ? 350
       : state.phase === 'REINFORCE' ? 600
-      : 700;
+      : 500;
 
     const timer = setTimeout(() => {
       const action = pickAIAction(state);

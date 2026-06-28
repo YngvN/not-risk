@@ -1,8 +1,8 @@
 {
   "home": {
-    "title": "Home",
-    "welcome": "Welcome to Expo Template",
-    "description": "A production-ready Expo starter with theming, i18n, and reusable components."
+    "title": "fRISKy",
+    "welcome": "World domination awaits.",
+    "description": "A Risk-inspired strategy game."
   },
   "components": {
     "title": "Components",
@@ -159,7 +159,13 @@
     "aiDifficultyHard": "Hard",
     "aiThinking": "AI is thinking…",
     "viewMyHand": "My hand",
-    "diceSkip": "Skip"
+    "diceSkip": "Skip",
+    "continentNA": "North America",
+    "continentSA": "South America",
+    "continentEU": "Europe",
+    "continentAF": "Africa",
+    "continentAS": "Asia",
+    "continentAU": "Australia"
   },
   "world": {
     "title": "World",

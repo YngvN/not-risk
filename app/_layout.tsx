@@ -24,7 +24,7 @@ export default function RootLayout() {
           <Stack
             screenOptions={{
               headerShown: false,
-              animation: Platform.select({ web: 'fade', default: 'ios' }),
+              animation: Platform.select({ web: 'fade', default: 'slide_from_right' }),
             }}
           />
           </GameProvider>
