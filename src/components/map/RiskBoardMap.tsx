@@ -16,8 +16,8 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
  * The SVG declared width/height (749×519) is smaller than the actual content
  * which extends to ~x=900 (Asia/Pacific wrapping right).
  */
-const VIEWBOX = '191 60 714 550';
-const VIEWBOX_ASPECT = 714 / 550;
+const VIEWBOX = '191 60 714 614';
+const VIEWBOX_ASPECT = 714 / 614;
 
 /**
  * Maps Risk_board.svg path IDs → TerritoryId.
@@ -212,7 +212,7 @@ export function RiskBoardMap({
   return (
     <Svg viewBox={VIEWBOX} width="100%" style={{ aspectRatio: VIEWBOX_ASPECT }}>
       {/* Transparent background — catches taps on ocean/empty space to deselect. */}
-      <Rect x={191} y={60} width={714} height={550} fill="transparent" onPress={handleBackgroundPress} />
+      <Rect x={191} y={60} width={714} height={614} fill="transparent" onPress={handleBackgroundPress} />
 
       {/* Dotted connection indicators — rendered BELOW territories so territory
           fills sit on top. fill="none" prevents enclosed areas from painting
