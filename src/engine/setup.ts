@@ -1,5 +1,5 @@
 import { TERRITORIES } from '../constants/riskWorldTerritories';
-import type { GameState, GameMode, Player, PlayerColor, TerritoryId, GameRules } from './types';
+import type { GameState, GameMode, Player, PlayerColor, TerritoryId, GameRules, AIDifficulty } from './types';
 import { DEFAULT_RULES } from './types';
 import { createDeck } from './cards';
 import { calcReinforcements } from './reinforcement';
@@ -13,6 +13,8 @@ export type SetupMode = 'claim' | 'random';
 export interface PlayerConfig {
   name: string;
   color: PlayerColor;
+  isAI?: boolean;
+  aiDifficulty?: AIDifficulty;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -54,6 +56,8 @@ function makePlayers(configs: PlayerConfig[]): Player[] {
     hqTerritoryId: null,
     hqChosen: false,
     capturedHqPlayerIds: [],
+    isAI: cfg.isAI ?? false,
+    aiDifficulty: cfg.aiDifficulty ?? null,
   }));
 }
 

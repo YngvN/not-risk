@@ -151,7 +151,15 @@
     "logLabel": "Logg",
     "gameLogLabel": "Spillogg",
     "eventLogLabel": "Historikk",
-    "eventLogEmpty": "Ingen hendelser ennå"
+    "eventLogEmpty": "Ingen hendelser ennå",
+    "aiLabel": "KI",
+    "humanLabel": "Menneskelig",
+    "aiDifficultyEasy": "Lett",
+    "aiDifficultyMedium": "Middels",
+    "aiDifficultyHard": "Vanskelig",
+    "aiThinking": "KI tenker…",
+    "viewMyHand": "Min hånd",
+    "diceSkip": "Hopp over"
   },
   "world": {
     "title": "Verden",

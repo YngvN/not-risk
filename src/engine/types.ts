@@ -8,6 +8,8 @@ export type PlayerColor = 'red' | 'blue' | 'green' | 'yellow' | 'black' | 'pink'
 
 export type GameMode = 'classic' | 'mission' | 'capital';
 
+export type AIDifficulty = 'easy' | 'medium' | 'hard';
+
 export type Phase = 'SETUP' | 'HQ_SELECTION' | 'REINFORCE' | 'ATTACK' | 'FORTIFY' | 'GAME_OVER';
 
 export type SetupSubPhase = 'CLAIMING' | 'PLACING';
@@ -104,6 +106,8 @@ export interface Player {
   hqTerritoryId: TerritoryId | null;
   hqChosen: boolean;
   capturedHqPlayerIds: PlayerId[];
+  isAI: boolean;
+  aiDifficulty: AIDifficulty | null;
 }
 
 export interface CaptureContext {

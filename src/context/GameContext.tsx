@@ -5,6 +5,7 @@ import { DEFAULT_RULES } from '../engine/types';
 import { createGame, type PlayerConfig, type SetupMode } from '../engine/setup';
 import { dispatch as engineDispatch } from '../engine/stateMachine';
 import { Colors } from '../constants/colors';
+import { pickAIAction } from '../ai';
 
 const SAVE_KEY = '@risk_game_state';
 
@@ -46,6 +47,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const dispatch = useCallback((action: GameAction) => {
     setState(prev => (prev ? engineDispatch(action, prev) : prev));
   }, []);
+
+  // AI turn runner: fires whenever state changes and the active player is an AI.
+  useEffect(() => {
+    if (!state || state.phase === 'GAME_OVER') return;
+    const activePlayer = state.players.find(p => p.id === state.activePlayerId);
+    if (!activePlayer?.isAI) return;
+
+    // Give extra time after a capture so the DiceModal can animate in and show.
+    const delay = state.captureContext ? 1600
+      : state.phase === 'SETUP' ? 350
+      : state.phase === 'REINFORCE' ? 600
+      : 700;
+
+    const timer = setTimeout(() => {
+      const action = pickAIAction(state);
+      if (action) dispatch(action);
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [state, dispatch]);
 
   const startGame = useCallback((
     playerConfigs: PlayerConfig[],

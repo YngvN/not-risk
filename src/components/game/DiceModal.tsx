@@ -10,6 +10,8 @@ import type { BattleResult } from '../../engine/types';
 interface DiceModalProps {
   result: BattleResult | null;
   onDismiss: () => void;
+  /** When set, the modal auto-dismisses after this many ms (used during AI turns). */
+  autoClose?: number;
 }
 
 function DieFace({ value, lost }: { value: number; lost: boolean }) {
@@ -23,11 +25,19 @@ function DieFace({ value, lost }: { value: number; lost: boolean }) {
 
 /**
  * Overlay sheet that displays battle dice results.
- * Rendered over the game screen whenever lastBattleResult is set.
+ * Shows a Skip button alongside OK so the human can dismiss early.
+ * When `autoClose` is set the modal dismisses itself automatically after that delay.
  */
-export function DiceModal({ result, onDismiss }: DiceModalProps) {
+export function DiceModal({ result, onDismiss, autoClose }: DiceModalProps) {
   const { colors } = useTheme();
   const { t } = useLanguage();
+
+  // Auto-close: resets the timer whenever a new result arrives.
+  React.useEffect(() => {
+    if (!autoClose || !result) return;
+    const timer = setTimeout(onDismiss, autoClose);
+    return () => clearTimeout(timer);
+  }, [result, autoClose, onDismiss]);
 
   return (
     <AnimatePresence>
@@ -87,12 +97,22 @@ export function DiceModal({ result, onDismiss }: DiceModalProps) {
               </Text>
             )}
 
-            <Pressable
-              onPress={onDismiss}
-              style={[styles.dismissBtn, { backgroundColor: colors.primary }]}
-            >
-              <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('common.ok')}</Text>
-            </Pressable>
+            <View style={styles.btnRow}>
+              <Pressable
+                onPress={onDismiss}
+                style={[styles.skipBtn, { borderColor: colors.border }]}
+              >
+                <Text variant="body" style={{ color: colors.textSecondary, fontWeight: '600' }}>
+                  {t('game.diceSkip')}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={onDismiss}
+                style={[styles.okBtn, { backgroundColor: colors.primary }]}
+              >
+                <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('common.ok')}</Text>
+              </Pressable>
+            </View>
           </MotiView>
         </MotiView>
       )}
@@ -148,7 +168,19 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginHorizontal: Spacing.xs,
   },
-  dismissBtn: {
+  btnRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  skipBtn: {
+    flex: 1,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  okBtn: {
+    flex: 2,
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.sm,
     alignItems: 'center',

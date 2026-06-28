@@ -151,7 +151,15 @@
     "logLabel": "Log",
     "gameLogLabel": "Game Log",
     "eventLogLabel": "History",
-    "eventLogEmpty": "No events yet"
+    "eventLogEmpty": "No events yet",
+    "aiLabel": "AI",
+    "humanLabel": "Human",
+    "aiDifficultyEasy": "Easy",
+    "aiDifficultyMedium": "Medium",
+    "aiDifficultyHard": "Hard",
+    "aiThinking": "AI is thinking…",
+    "viewMyHand": "My hand",
+    "diceSkip": "Skip"
   },
   "world": {
     "title": "World",

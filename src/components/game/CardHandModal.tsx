@@ -97,13 +97,17 @@ export interface CardHandModalProps {
   setsTraded: number;
   onTrade: (cardIds: [string, string, string]) => void;
   onClose: () => void;
+  /** When true, disables trading — used to let a human view their own hand during an AI turn. */
+  readOnly?: boolean;
+  /** Override the modal title (defaults to game.yourCards). */
+  title?: string;
 }
 
 /**
- * Bottom-sheet modal that displays the active player's Risk card hand.
- * The player taps exactly 3 cards forming a valid set, then presses Trade.
+ * Bottom-sheet modal that displays a player's Risk card hand.
+ * Pass readOnly to disable trading (e.g. viewing during an opponent's turn).
  */
-export function CardHandModal({ visible, hand, setsTraded, onTrade, onClose }: CardHandModalProps) {
+export function CardHandModal({ visible, hand, setsTraded, onTrade, onClose, readOnly, title }: CardHandModalProps) {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const [selected, setSelected] = useState<string[]>([]);
@@ -161,12 +165,11 @@ export function CardHandModal({ visible, hand, setsTraded, onTrade, onClose }: C
             <View style={styles.header}>
               <View>
                 <Text variant="h3" style={{ color: colors.text }}>
-                  {t('game.yourCards')}
+                  {title ?? t('game.yourCards')}
                 </Text>
                 <Text variant="caption" style={{ color: colors.textSecondary }}>
                   {t('game.cardCount').replace('{{n}}', String(hand.length))}
-                  {'  ·  '}
-                  {t('game.nextSetValue').replace('{{n}}', String(nextValue))}
+                  {!readOnly && `  ·  ${t('game.nextSetValue').replace('{{n}}', String(nextValue))}`}
                 </Text>
               </View>
               <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.surface }]}>
@@ -174,14 +177,16 @@ export function CardHandModal({ visible, hand, setsTraded, onTrade, onClose }: C
               </Pressable>
             </View>
 
-            {/* Instruction */}
-            <Text variant="caption" style={{ color: colors.textSecondary, marginBottom: Spacing.xs }}>
-              {!hasAnySets
-                ? t('game.noValidSets')
-                : isValid
-                  ? t('game.validSetSelected')
-                  : t('game.selectToTrade')}
-            </Text>
+            {/* Instruction (hidden in read-only mode) */}
+            {!readOnly && (
+              <Text variant="caption" style={{ color: colors.textSecondary, marginBottom: Spacing.xs }}>
+                {!hasAnySets
+                  ? t('game.noValidSets')
+                  : isValid
+                    ? t('game.validSetSelected')
+                    : t('game.selectToTrade')}
+              </Text>
+            )}
 
             {/* Card grid */}
             <ScrollView
@@ -192,28 +197,30 @@ export function CardHandModal({ visible, hand, setsTraded, onTrade, onClose }: C
                 <CardTile
                   key={card.id}
                   card={card}
-                  selected={selected.includes(card.id)}
-                  disabled={maxSelected}
-                  onPress={() => toggle(card.id)}
+                  selected={!readOnly && selected.includes(card.id)}
+                  disabled={readOnly || maxSelected}
+                  onPress={() => !readOnly && toggle(card.id)}
                 />
               ))}
             </ScrollView>
 
-            {/* Trade button */}
-            <Pressable
-              onPress={handleTrade}
-              disabled={!isValid}
-              style={[
-                styles.tradeBtn,
-                { backgroundColor: isValid ? colors.primary : colors.border },
-              ]}
-            >
-              <Text variant="body" style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
-                {isValid
-                  ? t('game.tradeForArmies').replace('{{n}}', String(nextValue))
-                  : t('game.selectToTrade')}
-              </Text>
-            </Pressable>
+            {/* Trade button — hidden in read-only mode */}
+            {!readOnly && (
+              <Pressable
+                onPress={handleTrade}
+                disabled={!isValid}
+                style={[
+                  styles.tradeBtn,
+                  { backgroundColor: isValid ? colors.primary : colors.border },
+                ]}
+              >
+                <Text variant="body" style={{ color: '#fff', fontWeight: '700', textAlign: 'center' }}>
+                  {isValid
+                    ? t('game.tradeForArmies').replace('{{n}}', String(nextValue))
+                    : t('game.selectToTrade')}
+                </Text>
+              </Pressable>
+            )}
           </MotiView>
         </MotiView>
       )}

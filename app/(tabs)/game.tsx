@@ -15,7 +15,7 @@ import { useGame, PLAYER_COLOR_HEX } from '../../src/context/GameContext';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useLanguage } from '../../src/hooks/useLanguage';
 import { Spacing, BorderRadius } from '../../src/constants/spacing';
-import type { PlayerColor, TerritoryId, GameMode, GameRules } from '../../src/engine/types';
+import type { PlayerColor, TerritoryId, GameMode, GameRules, AIDifficulty } from '../../src/engine/types';
 import { DEFAULT_RULES } from '../../src/engine/types';
 import { TERRITORIES, type Territory } from '../../src/constants/riskWorldTerritories';
 import { areAdjacent, getConnectedOwned, getAdjacentIds } from '../../src/engine/board';
@@ -141,14 +141,25 @@ function SetupScreen() {
   const [randomDeal, setRandomDeal] = useState(false);
   const [randomPlacement, setRandomPlacement] = useState(false);
   const [rules, setRules] = useState<GameRules>(DEFAULT_RULES);
+  const [playerIsAI, setPlayerIsAI] = useState<boolean[]>(Array(6).fill(false));
+  const [playerDifficulty, setPlayerDifficulty] = useState<AIDifficulty[]>(Array(6).fill('medium' as AIDifficulty));
 
   const toggleRule = <K extends keyof GameRules>(key: K, value: GameRules[K]) =>
     setRules(r => ({ ...r, [key]: value }));
+
+  const toggleAI = (i: number) => {
+    setPlayerIsAI(prev => { const n = [...prev]; n[i] = !n[i]; return n; });
+  };
+  const setDifficulty = (i: number, d: AIDifficulty) => {
+    setPlayerDifficulty(prev => { const n = [...prev]; n[i] = d; return n; });
+  };
 
   const handleStart = () => {
     const configs: PlayerConfig[] = Array.from({ length: playerCount }, (_, i) => ({
       name: names[i] || `Player ${i + 1}`,
       color: selectedColors[i],
+      isAI: playerIsAI[i],
+      aiDifficulty: playerIsAI[i] ? playerDifficulty[i] : undefined,
     }));
     startGame(configs, gameMode, randomDeal ? 'random' : 'claim', randomPlacement, rules);
   };
@@ -229,6 +240,28 @@ function SetupScreen() {
                 <Pressable key={color} onPress={() => pickColor(i, color)} style={[styles.colorSwatch, { backgroundColor: PLAYER_COLOR_HEX[color], borderWidth: selectedColors[i] === color ? 2 : 0, borderColor: colors.text }]} />
               ))}
             </View>
+            {/* AI toggle + difficulty */}
+            <View style={styles.aiRow}>
+              <Pressable
+                onPress={() => toggleAI(i)}
+                style={[styles.aiToggle, { backgroundColor: playerIsAI[i] ? colors.primary : colors.surface, borderColor: colors.border }]}
+              >
+                <Text variant="caption" style={{ color: playerIsAI[i] ? '#fff' : colors.text, fontWeight: '700' }}>
+                  {playerIsAI[i] ? t('game.aiLabel') : t('game.humanLabel')}
+                </Text>
+              </Pressable>
+              {playerIsAI[i] && (['easy', 'medium', 'hard'] as AIDifficulty[]).map(d => (
+                <Pressable
+                  key={d}
+                  onPress={() => setDifficulty(i, d)}
+                  style={[styles.diffBtn, { backgroundColor: playerDifficulty[i] === d ? colors.primary : colors.surface, borderColor: colors.border }]}
+                >
+                  <Text variant="caption" style={{ color: playerDifficulty[i] === d ? '#fff' : colors.text }}>
+                    {t(`game.aiDifficulty${d.charAt(0).toUpperCase() + d.slice(1)}` as Parameters<typeof t>[0])}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
         </View>
       ))}
@@ -280,7 +313,7 @@ function HQSelectionScreen() {
     ? (() => { const terr = TERRITORIES.find(t => t.id === candidate); return terr?.id ?? candidate; })()
     : null;
 
-  if (!deviceUnlocked && !allChosen) {
+  if (!deviceUnlocked && !allChosen && !activePlayer.isAI) {
     return <PassDeviceScreen visible player={activePlayer} onUnlock={() => { setDeviceUnlocked(true); setCandidate(null); }} />;
   }
 
@@ -368,6 +401,8 @@ function PlayScreen() {
   const [selection, setSelection] = useState<SelectionMode>({ phase: 'none' });
   const [showDice, setShowDice] = useState(false);
   const [showCards, setShowCards] = useState(false);
+  /** Which player's hand to display in CardHandModal; null = active player. */
+  const [viewingPlayerId, setViewingPlayerId] = useState<string | null>(null);
   const [showMission, setShowMission] = useState(false);
   const [passDeviceVisible, setPassDeviceVisible] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
@@ -442,24 +477,25 @@ function PlayScreen() {
     if (state?.lastBattleResult) setShowDice(true);
   }, [state?.lastBattleResult]);
 
-  // Auto-show confirmation modal when all reinforcements are placed
+  // Auto-show confirmation modal when all reinforcements are placed (human players only)
   React.useEffect(() => {
     if (
       st.phase === 'REINFORCE' &&
       st.reinforcementsRemaining === 0 &&
       !st.mustTradeCards &&
-      !st.pendingTerritoryBonus
+      !st.pendingTerritoryBonus &&
+      !activePlayer.isAI
     ) {
       setShowReinforceDoneModal(true);
     } else {
       setShowReinforceDoneModal(false);
     }
-  }, [st.phase, st.reinforcementsRemaining, st.mustTradeCards, st.pendingTerritoryBonus]);
+  }, [st.phase, st.reinforcementsRemaining, st.mustTradeCards, st.pendingTerritoryBonus, activePlayer.isAI]);
 
-  // Show pass-device screen when the active player changes (mission mode only)
+  // Show pass-device screen when the active player changes (mission mode only, human players only)
   React.useEffect(() => {
     if (st.mode === 'mission' && st.phase === 'REINFORCE') {
-      if (prevActivePlayer.current !== null && prevActivePlayer.current !== activePlayerId) {
+      if (prevActivePlayer.current !== null && prevActivePlayer.current !== activePlayerId && !activePlayer.isAI) {
         setPassDeviceVisible(true);
         setSelection({ phase: 'none' });
       }
@@ -720,16 +756,31 @@ function PlayScreen() {
         )}
       </View>
 
-      <ActionPanel state={st} dispatch={dispatch} selection={selection} onSelectionChange={setSelection} onOpenCards={() => setShowCards(true)} />
+      <ActionPanel
+        state={st}
+        dispatch={dispatch}
+        selection={selection}
+        onSelectionChange={setSelection}
+        onOpenCards={() => { setViewingPlayerId(null); setShowCards(true); }}
+        onViewPlayerCards={playerId => {
+          setViewingPlayerId(playerId);
+          setShowCards(true);
+        }}
+      />
 
-      <DiceModal result={showDice ? st.lastBattleResult : null} onDismiss={() => setShowDice(false)} />
+      <DiceModal
+        result={showDice ? st.lastBattleResult : null}
+        onDismiss={() => setShowDice(false)}
+        autoClose={activePlayer.isAI ? 1600 : undefined}
+      />
 
       <CardHandModal
         visible={showCards}
-        hand={activePlayer.hand}
+        hand={(viewingPlayerId ? st.players.find(p => p.id === viewingPlayerId) : activePlayer)?.hand ?? activePlayer.hand}
         setsTraded={st.setsTraded}
         onTrade={cardIds => dispatch({ type: 'TRADE_IN_CARDS', cardIds })}
-        onClose={() => setShowCards(false)}
+        readOnly={viewingPlayerId !== null}
+        onClose={() => { setShowCards(false); setViewingPlayerId(null); }}
       />
 
       {st.mode === 'mission' && activePlayer.mission && (
@@ -822,6 +873,9 @@ const styles = StyleSheet.create({
   nameInput:     { borderWidth: 1, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, fontSize: 16 },
   colorPicker:   { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap' },
   colorSwatch:   { width: 24, height: 24, borderRadius: 12 },
+  aiRow:         { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap', alignItems: 'center' },
+  aiToggle:      { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 3 },
+  diffBtn:       { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 3 },
   startBtn:      { borderRadius: BorderRadius.md, paddingVertical: Spacing.md, alignItems: 'center' },
   resumeBtn:     { borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center', borderWidth: 1, marginBottom: Spacing.md },
   center:        { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },

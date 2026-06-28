@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
+import { MotiView } from 'moti';
 import { Text } from '../ui/Text';
 import { Slider } from '../ui/Slider';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
 import { Spacing, BorderRadius } from '../../constants/spacing';
-import type { GameState, GameAction, TerritoryId } from '../../engine/types';
+import type { GameState, GameAction, TerritoryId, Player } from '../../engine/types';
 import { detectSets } from '../../engine/cards';
 import { TERRITORIES } from '../../constants/riskWorldTerritories';
 import { PLAYER_COLOR_HEX } from '../../context/GameContext';
@@ -23,6 +24,8 @@ interface ActionPanelProps {
   selection: SelectionMode;
   onSelectionChange: (s: SelectionMode) => void;
   onOpenCards: () => void;
+  /** Called with a player's id when the human wants to peek at their own hand during an AI turn. */
+  onViewPlayerCards: (playerId: string) => void;
 }
 
 // ── Shared sub-components ────────────────────────────────────────────────────
@@ -78,7 +81,7 @@ function Panel({
  * Context-sensitive bottom panel.
  * The top border colour matches the active player; their name is shown small above the controls.
  */
-export function ActionPanel({ state, dispatch, selection, onSelectionChange, onOpenCards }: ActionPanelProps) {
+export function ActionPanel({ state, dispatch, selection, onSelectionChange, onOpenCards, onViewPlayerCards }: ActionPanelProps) {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const [fortifyArmies, setFortifyArmies] = useState(1);
@@ -95,6 +98,36 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   React.useEffect(() => {
     setFortifyArmies(1);
   }, [selection.phase === 'FORTIFY_TO' ? (selection as { to: TerritoryId }).to : null]);
+
+  // ── AI turn overlay ──────────────────────────────────────────────────────────
+  if (activePlayer.isAI) {
+    const humanPlayers = state.players.filter((p: Player) => p.alive && !p.isAI);
+    return (
+      <Panel playerColor={playerColor} playerName={name}>
+        <MotiView
+          from={{ opacity: 0.4 }}
+          animate={{ opacity: 1 }}
+          transition={{ type: 'timing', duration: 700, loop: true }}
+        >
+          <Text variant="caption" style={{ color: colors.textSecondary }}>
+            {t('game.aiThinking')}
+          </Text>
+        </MotiView>
+        {humanPlayers.length > 0 && (
+          <View style={styles.row}>
+            {humanPlayers.map((p: Player) => (
+              <Btn
+                key={p.id}
+                label={`${p.name} (${p.hand.length})`}
+                variant="secondary"
+                onPress={() => onViewPlayerCards(p.id)}
+              />
+            ))}
+          </View>
+        )}
+      </Panel>
+    );
+  }
 
   // ── Territory bonus pending ──────────────────────────────────────────────────
   if (state.pendingTerritoryBonus) {
