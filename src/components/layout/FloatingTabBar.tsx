@@ -146,9 +146,9 @@ export function FloatingTabBar() {
       {/* FAB */}
       <Pressable
         onPress={() => setOpen(v => !v)}
-        style={[styles.fab, { bottom: fabBottom, left: MARGIN, backgroundColor: colors.primary }]}
+        style={[styles.fab, { bottom: fabBottom, left: MARGIN, backgroundColor: colors.card, borderColor: colors.border }]}
       >
-        <Ionicons name={open ? 'close' : 'ellipsis-horizontal'} size={22} color="#fff" />
+        <Ionicons name={open ? 'close' : 'ellipsis-horizontal'} size={22} color={colors.text} />
       </Pressable>
 
       {/* Exit-game confirmation */}
@@ -215,11 +215,12 @@ const styles = StyleSheet.create({
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 8,
   },

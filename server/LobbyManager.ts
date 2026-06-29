@@ -51,6 +51,20 @@ export class LobbyManager {
   }
 
   get isFull(): boolean { return this.slots.size >= MAX_PLAYERS; }
+
+  /**
+   * True when every connected player has marked ready and the stored config
+   * would produce at least 2 total players (LAN + local + AI).
+   */
+  get allReady(): boolean {
+    const connected = Array.from(this.slots.values())
+      .map(s => s.player)
+      .filter(p => p.connected);
+    if (connected.length === 0 || !this._config) return false;
+    const total = connected.length + this._config.localSlots.length + this._config.aiSlots.length;
+    return total >= 2 && connected.every(p => p.isReady);
+  }
+
   get adminId(): PlayerId | null {
     for (const [id, { player }] of this.slots) {
       if (player.isAdmin) return id;

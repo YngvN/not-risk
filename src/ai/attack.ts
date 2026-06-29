@@ -2,6 +2,7 @@ import type { GameState, GameAction, TerritoryId, AIDifficulty } from '../engine
 import { getContinentTerritories, getAdjacentIds, CONTINENT_BONUSES } from '../engine/board';
 import { CONTINENT_PRIORITY, getMissionDirective } from './evaluate';
 import { captureProb } from './dice';
+import { detectSets } from '../engine/cards';
 import type { ContinentId } from '../constants/riskWorldTerritories';
 
 /** Minimum capture probability required to initiate an attack per difficulty. */
@@ -137,6 +138,17 @@ export function pickAttackAction(
       Math.round(minArmies + (maxArmies - minArmies) * OCCUPY_FRACTION[difficulty]),
     );
     return { type: 'OCCUPY', armies };
+  }
+
+  // Accumulated 5+ cards during attack — must trade before END_ATTACK is allowed.
+  if (state.mustTradeCards) {
+    const player = state.players.find(p => p.id === playerId)!;
+    const allSets = detectSets(player.hand);
+    const preferred = allSets.filter(set => !set.some(c => c.territoryId === player.hqTerritoryId));
+    const sets = preferred.length > 0 ? preferred : allSets;
+    if (sets.length > 0) {
+      return { type: 'TRADE_IN_CARDS', cardIds: sets[0].map(c => c.id) as [string, string, string] };
+    }
   }
 
   const attacks = findAttacks(state, playerId, difficulty);

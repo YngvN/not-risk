@@ -186,19 +186,17 @@ wss.on('connection', ws => {
       }
 
       case 'READY': {
-        if (playerId) lobby.setReady(playerId);
+        if (!playerId || gameStarted) break;
+        lobby.setReady(playerId);
+        if (lobby.allReady && lobby.config) {
+          gameStarted = true;
+          game.start(lobby.players, lobby.config);
+        }
         break;
       }
 
       case 'SET_CONFIG': {
         if (playerId && playerId === lobby.adminId) lobby.setConfig(msg.config);
-        break;
-      }
-
-      case 'START': {
-        if (!playerId || playerId !== lobby.adminId || gameStarted) return;
-        gameStarted = true;
-        game.start(lobby.players, msg.config);
         break;
       }
 

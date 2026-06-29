@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from '../Text';
 import { HostPanel } from './HostPanel';
 import { JoinPanel } from './JoinPanel';
@@ -28,7 +28,7 @@ export function LobbyScreen({ defaultTab = 'host' }: LobbyScreenProps) {
   const {
     status, myId, isAdmin, serverIp, serverPort,
     lobbyPlayers, lobbyConfig, droppedPlayer,
-    connect, disconnect, markReady, startGame, sendDisconnectChoice,
+    connect, disconnect, markReady, sendDisconnectChoice,
   } = useMultiplayer();
 
   const [tab, setTab] = useState<Tab>(defaultTab);
@@ -41,10 +41,6 @@ export function LobbyScreen({ defaultTab = 'host' }: LobbyScreenProps) {
     multiplayerService.send({ type: 'SET_CONFIG', config });
   };
 
-  const handleStart = (config: GameStartConfig) => {
-    startGame(config);
-  };
-
   const isConnected = status === 'connected';
 
   return (
@@ -53,11 +49,10 @@ export function LobbyScreen({ defaultTab = 'host' }: LobbyScreenProps) {
       {!isConnected && (
         <View style={[styles.tabs, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {(['host', 'join'] as Tab[]).map(t2 => (
-            <TouchableOpacity
+            <Pressable
               key={t2}
-              style={[styles.tab, tab === t2 && { backgroundColor: colors.primary }]}
+              style={({ pressed }) => [styles.tab, tab === t2 && { backgroundColor: colors.primary }, pressed && { opacity: 0.7 }]}
               onPress={() => setTab(t2)}
-              activeOpacity={0.7}
             >
               <Text
                 variant="label"
@@ -65,7 +60,7 @@ export function LobbyScreen({ defaultTab = 'host' }: LobbyScreenProps) {
               >
                 {t2 === 'host' ? t('lobby.tabHost') : t('lobby.tabJoin')}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       )}
@@ -81,7 +76,7 @@ export function LobbyScreen({ defaultTab = 'host' }: LobbyScreenProps) {
           onConnect={handleConnect}
           onDisconnect={disconnect}
           onConfigChange={handleConfigChange}
-          onStart={handleStart}
+          onReady={markReady}
           onDisconnectChoice={sendDisconnectChoice}
         />
       ) : (

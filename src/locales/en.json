@@ -204,7 +204,7 @@
     "players": "Players",
     "startGame": "Start Game",
     "markReady": "I'm ready",
-    "waitingForAdmin": "Waiting for the host to start…",
+    "waitingForAdmin": "Waiting for all players to be ready…",
     "waitingForServer": "Connecting to server…",
     "serverIP": "Server IP address",
     "port": "Port",

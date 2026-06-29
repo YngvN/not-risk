@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
 import { Text } from '../ui/Text';
 import { useTheme } from '../../hooks/useTheme';
@@ -58,24 +58,17 @@ interface Props {
   result: BattleResult | null;
   attackerName: string;
   defenderName: string;
-  /** Whether the attacker still has ≥ 2 armies and can attack the same territory again. */
-  canAttackAgain: boolean;
-  /** Dismiss and keep the ATTACK_TO selection so the attack slider reappears. */
-  onAttackAgain: () => void;
-  onDismiss: () => void;
   /** Wide-screen layout: sides placed in a row instead of a column. */
   isWide: boolean;
 }
 
 /**
- * Inline battle result display — replaces the DiceModal.
+ * Inline battle result display.
  * Dice animate in one by one; attacker dice first, defender dice after.
  * Layout adapts: column on narrow screens, row on wide screens.
  */
 export function BattleResultPanel({
-  result, attackerName, defenderName,
-  canAttackAgain, onAttackAgain, onDismiss,
-  isWide,
+  result, attackerName, defenderName, isWide,
 }: Props) {
   const { colors } = useTheme();
   const { t } = useLanguage();
@@ -118,28 +111,6 @@ export function BattleResultPanel({
               {t('game.captured')}
             </Text>
           )}
-
-          {/* Buttons — no Skip; Attack Again only when applicable */}
-          <View style={styles.btnRow}>
-            {canAttackAgain && (
-              <Pressable
-                onPress={onAttackAgain}
-                style={[styles.btn, { backgroundColor: colors.primary }]}
-              >
-                <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>
-                  {t('game.attackAgain')}
-                </Text>
-              </Pressable>
-            )}
-            <Pressable
-              onPress={onDismiss}
-              style={[styles.btn, { backgroundColor: canAttackAgain ? colors.surface : colors.primary, borderWidth: canAttackAgain ? 1 : 0, borderColor: colors.border }]}
-            >
-              <Text variant="body" style={{ color: canAttackAgain ? colors.text : '#fff', fontWeight: '700' }}>
-                {t('common.ok')}
-              </Text>
-            </Pressable>
-          </View>
         </MotiView>
       )}
     </AnimatePresence>
@@ -192,15 +163,5 @@ const styles = StyleSheet.create({
     height: 1,
     alignSelf: 'stretch',
     marginVertical: Spacing.xs,
-  },
-  btnRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  btn: {
-    flex: 1,
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
   },
 });

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../Text';
 import { useTheme } from '../../../hooks/useTheme';
 import { useLanguage } from '../../../hooks/useLanguage';
@@ -40,6 +41,9 @@ export function LobbyPlayerList({ players }: Props) {
                 : t('lobby.waiting')}
             </Text>
           </View>
+          {player.connected && player.isReady && (
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+          )}
           <View style={[styles.indicator, { backgroundColor: player.connected ? colors.success : colors.error }]} />
         </View>
       ))}

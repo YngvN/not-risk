@@ -56,7 +56,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (networkDispatch.current) {
       networkDispatch.current(action);
     } else {
-      setState(prev => (prev ? engineDispatch(action, prev) : prev));
+      setState(prev => {
+        if (!prev) return prev;
+        const next = engineDispatch(action, prev);
+        // If the state machine rejected the action (same reference), return a new
+        // shallow copy so the AI useEffect always re-fires and can pick a different
+        // action rather than silently freezing.
+        return next === prev ? { ...prev } : next;
+      });
     }
   }, []);
 

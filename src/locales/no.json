@@ -204,7 +204,7 @@
     "players": "Spillere",
     "startGame": "Start spill",
     "markReady": "Jeg er klar",
-    "waitingForAdmin": "Venter på at verten starter…",
+    "waitingForAdmin": "Venter på at alle spillere er klare…",
     "waitingForServer": "Kobler til server…",
     "serverIP": "Server IP-adresse",
     "port": "Port",

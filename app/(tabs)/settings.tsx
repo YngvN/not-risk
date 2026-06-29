@@ -1,4 +1,4 @@
-import { StyleSheet, Switch, TouchableOpacity, View, Pressable } from 'react-native';
+import { StyleSheet, Switch, View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Text, Card } from '../../src/components';
@@ -56,14 +56,15 @@ export default function SettingsScreen() {
           const isLast = index === availableLanguages.length - 1;
           const isActive = language === lang.code;
           return (
-            <TouchableOpacity
+            <Pressable
               key={lang.code}
-              style={[
+              style={({ pressed }) => [
                 styles.languageRow,
                 !isLast && {
                   borderBottomWidth: 1,
                   borderBottomColor: colors.border,
                 },
+                pressed && { opacity: 0.7 },
               ]}
               onPress={() => setLanguage(lang.code)}
               accessibilityRole="radio"
@@ -73,7 +74,7 @@ export default function SettingsScreen() {
               {isActive && (
                 <Text style={{ color: colors.primary }}>✓</Text>
               )}
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </Card>

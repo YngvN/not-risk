@@ -8,7 +8,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from '../../hooks/useTheme';
 
-const THUMB = 26;
+const THUMB = 13;
 
 export interface SliderProps {
   value: number;
@@ -40,20 +40,29 @@ export function Slider({ value, min, max, onChange, step = 1 }: SliderProps) {
     }
   }, [value, min, max]);
 
+  const snapTo = (x: number): number => {
+    'worklet';
+    const range = max - min;
+    if (trackWidth.value <= 0 || range <= 0) return min;
+    const clamped = Math.max(0, Math.min(trackWidth.value, x));
+    const rawValue = min + (clamped / trackWidth.value) * range;
+    return Math.max(min, Math.min(max, Math.round((rawValue - min) / step) * step + min));
+  };
+
   const pan = Gesture.Pan()
-    .onBegin(() => {
+    .onBegin(e => {
+      'worklet';
+      // Jump to wherever the user touched on the track, then track from there
+      const snapped = snapTo(e.x);
+      thumbX.value = ((snapped - min) / (max - min)) * trackWidth.value;
       startX.value = thumbX.value;
+      runOnJS(onChange)(snapped);
     })
     .onUpdate(e => {
       'worklet';
-      const range = max - min;
-      if (trackWidth.value <= 0 || range <= 0) return;
-
-      const raw = Math.max(0, Math.min(trackWidth.value, startX.value + e.translationX));
-      thumbX.value = raw;
-
-      const rawValue = min + (raw / trackWidth.value) * range;
-      const snapped = Math.max(min, Math.min(max, Math.round((rawValue - min) / step) * step + min));
+      if (max <= min) return;
+      const snapped = snapTo(startX.value + e.translationX);
+      thumbX.value = ((snapped - min) / (max - min)) * trackWidth.value;
       runOnJS(onChange)(snapped);
     });
 
@@ -65,21 +74,21 @@ export function Slider({ value, min, max, onChange, step = 1 }: SliderProps) {
   }));
 
   return (
-    <View
-      style={styles.container}
-      onLayout={e => {
-        const w = e.nativeEvent.layout.width;
-        trackWidth.value = w;
-        if (max > min) thumbX.value = ((value - min) / (max - min)) * w;
-      }}
-    >
-      {/* Track */}
-      <View style={[styles.track, { backgroundColor: colors.border }]}>
-        <Animated.View style={[styles.fill, fillAnimStyle, { backgroundColor: colors.primary }]} />
-      </View>
+    <GestureDetector gesture={pan}>
+      <View
+        style={styles.container}
+        onLayout={e => {
+          const w = e.nativeEvent.layout.width;
+          trackWidth.value = w;
+          if (max > min) thumbX.value = ((value - min) / (max - min)) * w;
+        }}
+      >
+        {/* Track */}
+        <View style={[styles.track, { backgroundColor: colors.border }]}>
+          <Animated.View style={[styles.fill, fillAnimStyle, { backgroundColor: colors.primary }]} />
+        </View>
 
-      {/* Thumb */}
-      <GestureDetector gesture={pan}>
+        {/* Thumb */}
         <Animated.View
           style={[
             styles.thumb,
@@ -87,8 +96,8 @@ export function Slider({ value, min, max, onChange, step = 1 }: SliderProps) {
             { backgroundColor: colors.primary, borderColor: colors.background },
           ]}
         />
-      </GestureDetector>
-    </View>
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -110,7 +119,7 @@ const styles = StyleSheet.create({
     width: THUMB,
     height: THUMB,
     borderRadius: THUMB / 2,
-    borderWidth: 3,
+    borderWidth: 2,
     top: 0,
   },
 });

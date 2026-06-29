@@ -26,6 +26,12 @@ interface ActionPanelProps {
   onOpenCards: () => void;
   /** Called with a player's id when the human wants to peek at their own hand during an AI turn. */
   onViewPlayerCards: (playerId: string) => void;
+  /** If set, shows a "View mission" chip in the panel header. */
+  onShowMission?: () => void;
+  /** If set, shows a log toggle chip. logBadge shows a count when > 0. */
+  onToggleLog?: () => void;
+  logOpen?: boolean;
+  logBadge?: number;
 }
 
 // ── Shared sub-components ────────────────────────────────────────────────────
@@ -58,18 +64,23 @@ function Btn({
 function Panel({
   playerColor,
   playerName,
+  chips,
   children,
 }: {
   playerColor: string;
   playerName: string;
+  chips?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { colors } = useTheme();
   return (
     <View style={[styles.panel, { backgroundColor: colors.card, borderTopColor: playerColor }]}>
-      <Text style={{ color: colors.textSecondary, fontSize: 11, letterSpacing: 0.2 }}>
-        {playerName}
-      </Text>
+      <View style={styles.panelHeader}>
+        <Text style={{ color: colors.textSecondary, fontSize: 11, letterSpacing: 0.2 }}>
+          {playerName}
+        </Text>
+        {chips}
+      </View>
       {children}
     </View>
   );
@@ -81,7 +92,10 @@ function Panel({
  * Context-sensitive bottom panel.
  * The top border colour matches the active player; their name is shown small above the controls.
  */
-export function ActionPanel({ state, dispatch, selection, onSelectionChange, onOpenCards, onViewPlayerCards }: ActionPanelProps) {
+export function ActionPanel({
+  state, dispatch, selection, onSelectionChange, onOpenCards, onViewPlayerCards,
+  onShowMission, onToggleLog, logOpen, logBadge,
+}: ActionPanelProps) {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const [fortifyArmies, setFortifyArmies] = useState(1);
@@ -90,6 +104,28 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   const activePlayer = state.players.find(p => p.id === state.activePlayerId)!;
   const playerColor = PLAYER_COLOR_HEX[activePlayer.color];
   const name = activePlayer.name;
+
+  const chips = (
+    <View style={styles.chips}>
+      {onShowMission && (
+        <Pressable onPress={onShowMission} style={[styles.chip, { borderColor: colors.border }]}>
+          <Text variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>{t('game.viewMission')}</Text>
+        </Pressable>
+      )}
+      <Pressable onPress={onOpenCards} style={[styles.chip, { borderColor: colors.border }]}>
+        <Text variant="caption" style={{ color: colors.text, fontWeight: '700' }}>
+          {t('game.cardCount').replace('{{n}}', String(activePlayer.hand.length))}
+        </Text>
+      </Pressable>
+      {onToggleLog && (
+        <Pressable onPress={onToggleLog} style={[styles.chip, { borderColor: colors.border, backgroundColor: logOpen ? colors.primary : 'transparent' }]}>
+          <Text variant="caption" style={{ color: logOpen ? '#fff' : colors.text, fontWeight: '700' }}>
+            {t('game.logLabel')}{(logBadge ?? 0) > 0 ? ` · ${logBadge}` : ''}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
 
   React.useEffect(() => {
     if (state.captureContext) {
@@ -107,7 +143,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   if (activePlayer.isAI) {
     const humanPlayers = state.players.filter((p: Player) => p.alive && !p.isAI);
     return (
-      <Panel playerColor={playerColor} playerName={name}>
+      <Panel playerColor={playerColor} playerName={name} chips={chips}>
         <MotiView
           from={{ opacity: 0.4 }}
           animate={{ opacity: 1 }}
@@ -136,7 +172,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   // ── Territory bonus pending ──────────────────────────────────────────────────
   if (state.pendingTerritoryBonus) {
     return (
-      <Panel playerColor={playerColor} playerName={name}>
+      <Panel playerColor={playerColor} playerName={name} chips={chips}>
         <Text variant="body" style={{ color: colors.success, fontWeight: '700' }}>
           {t('game.territoryBonus')}
         </Text>
@@ -163,7 +199,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   if (state.captureContext) {
     const { minArmies, maxArmies } = state.captureContext;
     return (
-      <Panel playerColor={playerColor} playerName={name}>
+      <Panel playerColor={playerColor} playerName={name} chips={chips}>
         <View style={styles.labelRow}>
           <Text variant="body" style={{ color: colors.text, fontWeight: '700' }}>
             {t('game.occupyTitle')}
@@ -182,7 +218,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   // ── Must trade cards ─────────────────────────────────────────────────────────
   if (state.mustTradeCards) {
     return (
-      <Panel playerColor={playerColor} playerName={name}>
+      <Panel playerColor={playerColor} playerName={name} chips={chips}>
         <Text variant="body" style={{ color: colors.warning, fontWeight: '700' }}>
           {t('game.mustTrade')}
         </Text>
@@ -202,7 +238,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
     // All armies placed — modal takes over; show minimal panel so player bar stays visible
     if (canEnd && !state.mustTradeCards && !state.pendingTerritoryBonus) {
       return (
-        <Panel playerColor={playerColor} playerName={name}>
+        <Panel playerColor={playerColor} playerName={name} chips={chips}>
           <Text variant="caption" style={{ color: colors.textSecondary }}>
             {t('game.allArmiesPlaced')}
           </Text>
@@ -210,7 +246,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
       );
     }
     return (
-      <Panel playerColor={playerColor} playerName={name}>
+      <Panel playerColor={playerColor} playerName={name} chips={chips}>
         <View style={styles.labelRow}>
           <Text variant="caption" style={{ color: colors.textSecondary }}>
             {t('game.armiesRemaining').replace('{{n}}', String(state.reinforcementsRemaining))}
@@ -247,7 +283,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
       const { from, to } = selection;
       const maxDice = Math.min(3, state.territories[from].armies - 1);
       return (
-        <Panel playerColor={playerColor} playerName={name}>
+        <Panel playerColor={playerColor} playerName={name} chips={chips}>
           {/* key resets local dice state when the selected territories change */}
           <AttackDicePanel
             key={`${from}-${to}`}
@@ -262,7 +298,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
     }
 
     return (
-      <Panel playerColor={playerColor} playerName={name}>
+      <Panel playerColor={playerColor} playerName={name} chips={chips}>
         <Text variant="caption" style={{ color: colors.textSecondary }}>
           {selection.phase === 'ATTACK_FROM'
             ? t('game.tapEnemyToAttack')
@@ -279,7 +315,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
       const { from, to } = selection;
       const maxMove = state.territories[from].armies - 1;
       return (
-        <Panel playerColor={playerColor} playerName={name}>
+        <Panel playerColor={playerColor} playerName={name} chips={chips}>
           <View style={styles.labelRow}>
             <Text variant="body" style={{ color: colors.text, fontWeight: '700' }}>
               {t('game.phaseFortify')}
@@ -307,7 +343,7 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
     }
 
     return (
-      <Panel playerColor={playerColor} playerName={name}>
+      <Panel playerColor={playerColor} playerName={name} chips={chips}>
         <Text variant="caption" style={{ color: colors.textSecondary }}>
           {selection.phase === 'FORTIFY_FROM'
             ? t('game.tapConnectedToFortify')
@@ -369,6 +405,21 @@ const styles = StyleSheet.create({
     borderTopWidth: 3,
     padding: Spacing.md,
     gap: Spacing.sm,
+  },
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chips: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  chip: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
   },
   row: {
     flexDirection: 'row',

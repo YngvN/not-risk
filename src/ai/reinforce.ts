@@ -108,9 +108,12 @@ function tryTrade(state: GameState, playerId: string, difficulty: AIDifficulty):
 
   if (!state.mustTradeCards && !proactiveTrade) return null;
 
-  const sets = detectSets(player.hand).filter(set =>
-    !set.some(c => c.territoryId === player.hqTerritoryId),
-  );
+  const allSets = detectSets(player.hand);
+  if (allSets.length === 0) return null;
+
+  // Prefer sets that don't include the HQ card; fall back to any set if a trade is mandatory.
+  const preferred = allSets.filter(set => !set.some(c => c.territoryId === player.hqTerritoryId));
+  const sets = preferred.length > 0 ? preferred : (state.mustTradeCards ? allSets : []);
   if (sets.length === 0) return null;
 
   return { type: 'TRADE_IN_CARDS', cardIds: sets[0].map(c => c.id) as [string, string, string] };

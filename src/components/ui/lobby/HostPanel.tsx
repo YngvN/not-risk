@@ -33,7 +33,7 @@ interface Props {
   onConnect: (host: string, port: number, name: string, color: PlayerColor) => void;
   onDisconnect: () => void;
   onConfigChange: (config: GameStartConfig) => void;
-  onStart: (config: GameStartConfig) => void;
+  onReady: () => void;
   onDisconnectChoice: (choice: 'ai' | 'pause') => void;
 }
 
@@ -62,7 +62,7 @@ function Checkbox({ checked, onToggle, label }: { checked: boolean; onToggle: ()
  */
 export function HostPanel({
   status, serverIp, serverPort, players, droppedPlayerId,
-  isAdmin, onConnect, onDisconnect, onConfigChange, onStart, onDisconnectChoice,
+  isAdmin, onConnect, onDisconnect, onConfigChange, onReady, onDisconnectChoice,
 }: Props) {
   const { colors } = useTheme();
   const { t } = useLanguage();
@@ -122,16 +122,6 @@ export function HostPanel({
 
   const handleConnect = () => {
     onConnect(host.trim(), Number(port) || 8080, name.trim() || t('lobby.defaultName'), 'red');
-  };
-
-  const handleStart = () => {
-    onStart({
-      mode: gameMode,
-      setupMode: randomDeal ? 'random' : 'claim',
-      randomPlacement,
-      localSlots: localSlots.map(s => ({ name: s.name || t('game.humanLabel'), color: s.color })),
-      aiSlots: aiSlots.map(s => ({ name: s.name || t('game.aiLabel'), color: s.color, difficulty: s.difficulty })),
-    });
   };
 
   // Broadcast config to all lobby members whenever the host changes anything
@@ -284,15 +274,18 @@ export function HostPanel({
         {t('game.playerCount')}  {totalPlayers}/6
       </Text>
 
-      {/* LAN players — read-only */}
+      {/* LAN players — read-only, show ready state */}
       {players.map(player => (
-        <View key={player.id} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
+        <View key={player.id} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: player.isReady ? colors.success : colors.primary }]}>
           <View style={[styles.colorDot, { backgroundColor: PLAYER_COLOR_HEX[player.color] }]} />
           <View style={{ flex: 1, gap: Spacing.xs }}>
             <View style={styles.cardHeader}>
               <Text variant="body" style={{ color: colors.text, flex: 1, fontWeight: '600' }}>
                 {player.name}
               </Text>
+              {player.isReady && (
+                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+              )}
               <View style={[styles.badge, { backgroundColor: colors.primary }]}>
                 <Text variant="caption" style={{ color: '#fff', fontWeight: '700', fontSize: 10 }}>LAN</Text>
               </View>
@@ -395,13 +388,24 @@ export function HostPanel({
         </View>
       )}
 
-      <Pressable
-        onPress={handleStart}
-        disabled={!canStart}
-        style={[styles.startBtn, { backgroundColor: canStart ? colors.primary : colors.border, marginTop: Spacing.sm }]}
-      >
-        <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('lobby.startGame')}</Text>
-      </Pressable>
+      {/* Host marks themselves ready — game auto-starts when everyone is ready */}
+      {(() => {
+        const myPlayer = players.find(p => p.isAdmin);
+        const iAmReady = myPlayer?.isReady ?? false;
+        return iAmReady ? (
+          <Text variant="caption" style={{ color: colors.textSecondary, textAlign: 'center' }}>
+            {t('lobby.waitingForAdmin')}
+          </Text>
+        ) : (
+          <Pressable
+            onPress={onReady}
+            disabled={!canStart}
+            style={[styles.startBtn, { backgroundColor: canStart ? colors.primary : colors.border, marginTop: Spacing.sm }]}
+          >
+            <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('lobby.markReady')}</Text>
+          </Pressable>
+        );
+      })()}
 
       <Button label={t('common.back')} variant="ghost" onPress={onDisconnect} />
     </View>

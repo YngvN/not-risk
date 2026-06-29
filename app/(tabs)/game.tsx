@@ -157,7 +157,7 @@ function SetupScreen() {
   const {
     status: mpStatus, serverIp, serverPort, lobbyPlayers,
     connect: mpConnect, disconnect: mpDisconnect,
-    startGame: mpStartGame,
+    markReady: mpMarkReady,
   } = useMultiplayer();
   const { colors } = useTheme();
   const { t } = useLanguage();
@@ -270,7 +270,9 @@ function SetupScreen() {
     };
 
     if (isOnline) {
-      mpStartGame(config);
+      // Config was already broadcast via SET_CONFIG effect; just mark ready.
+      // The server auto-starts once all connected players are ready.
+      mpMarkReady();
     } else {
       const configs: PlayerConfig[] = players.map(p => ({
         name: p.name || t('game.humanLabel'),
@@ -707,7 +709,8 @@ function GameOverScreen() {
 const WIDE_BREAKPOINT = 680;
 
 function PlayScreen() {
-  const { state, dispatch } = useGame();
+  const { state, dispatch, multiplayerMode } = useGame();
+  const { myGamePlayerId, localGamePlayerIds } = useMultiplayer();
   const { colors } = useTheme();
   const { t } = useLanguage();
   const { showAllMissions } = useTesting();
@@ -738,15 +741,21 @@ function PlayScreen() {
     defenderName: '',
   });
   // Tracks whether we've already saved the pre-selection zoom for this selection session
-  const zoomSavedRef = useRef(false);
 
   const st = state!;
   const activePlayerId = st.activePlayerId;
   const activePlayer = st.players.find(p => p.id === activePlayerId)!;
 
+  // In a multiplayer game, only the device that owns the active player can act.
+  // localGamePlayerIds covers extra human slots sitting at the host device.
+  const isMyTurn = multiplayerMode !== 'multiplayer'
+    || activePlayerId === myGamePlayerId
+    || localGamePlayerIds.includes(activePlayerId);
+
   // Intercept ATTACK dispatches so we know which territories were involved
   // when the battle result arrives on the next render.
   const trackedDispatch = React.useCallback((action: GameAction) => {
+    if (!isMyTurn) return;
     if (action.type === 'ATTACK') {
       lastAttackRef.current = { from: action.from, to: action.to };
       // Capture names BEFORE dispatch changes territory ownership on capture
@@ -758,70 +767,32 @@ function PlayScreen() {
       };
     }
     dispatch(action);
-  }, [dispatch, st, activePlayer, t]);
+  }, [dispatch, st, activePlayer, t, isMyTurn]);
 
-  // ── Zoom helpers (attack phase) ───────────────────────────────────────────
+  // ── Camera pan helper (attack phase) ─────────────────────────────────────
 
   /** Risk board SVG viewBox origin and width — must match VIEWBOX in RiskBoardMap.tsx. */
   const VB = { x: 91, y: 60, w: 914 } as const;
 
-  const zoomToTerritory = React.useCallback((from: TerritoryId) => {
-    // Collect label positions for the attacker and all its neighbours
-    const ids = [from, ...getAdjacentIds(from)] as string[];
-    const positions = ids.map(id => TERRITORY_LABEL_POS[id]).filter((p): p is { x: number; y: number } => Boolean(p));
-    if (positions.length === 0) return;
-
-    const minX = Math.min(...positions.map(p => p.x));
-    const maxX = Math.max(...positions.map(p => p.x));
-    const minY = Math.min(...positions.map(p => p.y));
-    const maxY = Math.max(...positions.map(p => p.y));
-
-    const svgCx = (minX + maxX) / 2;
-    const svgCy = (minY + maxY) / 2;
-
-    // bbox dimensions in SVG units (with padding)
-    const pad = 70;
-    const bboxW = Math.max(maxX - minX + pad * 2, 160);
-
-    // Scale to fill ~75 % of the available map width
+  // Pan to center a territory without changing the zoom level.
+  const panToTerritory = React.useCallback((id: TerritoryId) => {
+    const pos = TERRITORY_LABEL_POS[id];
+    if (!pos) return;
     const mapWidth = isWide ? width - 200 : width;
-    const targetScale = Math.min(3.8, Math.max(1.8, 0.75 * VB.w / bboxW));
-
-    // Convert SVG focal point to container pixel coords
-    const px = (svgCx - VB.x) * mapWidth / VB.w;
-    const py = (svgCy - VB.y) * mapWidth / VB.w;
-
-    zoomMapRef.current?.zoomToPoint(px, py, targetScale);
+    const px = (pos.x - VB.x) * mapWidth / VB.w;
+    const py = (pos.y - VB.y) * mapWidth / VB.w;
+    const currentScale = zoomMapRef.current?.getTransform().scale.value ?? 1;
+    zoomMapRef.current?.zoomToPoint(px, py, currentScale);
   }, [isWide, width]);
 
-  // Zoom in when attacker territory selected; restore saved zoom on deselect
+  // Pan to the selected attacker territory; do nothing for target selection or fortify.
   React.useEffect(() => {
     if (selection.phase === 'ATTACK_FROM') {
-      // Save the user's current zoom level only on the first territory selection
-      // of this attack sequence, so deselecting goes back to exactly that level.
-      if (!zoomSavedRef.current) {
-        zoomMapRef.current?.saveTransform();
-        zoomSavedRef.current = true;
-      }
-      zoomToTerritory(selection.from);
-    } else if (selection.phase === 'none') {
-      // Restore the zoom the player had before they selected a territory
-      zoomSavedRef.current = false;
-      zoomMapRef.current?.restoreTransform();
-    } else if (selection.phase === 'FORTIFY_FROM' || selection.phase === 'FORTIFY_TO') {
-      zoomSavedRef.current = false;
-      zoomMapRef.current?.resetZoom();
+      panToTerritory(selection.from);
     }
-    // Keep zoom when moving to ATTACK_TO (target selection)
+    // ATTACK_TO: don't move — the attacker territory is already centered
+    // FORTIFY_FROM / FORTIFY_TO / none: don't move at all
   }, [selection.phase, (selection as { from?: TerritoryId }).from]);
-
-  // Reset zoom when leaving attack phase entirely
-  React.useEffect(() => {
-    if (st.phase !== 'ATTACK') {
-      zoomSavedRef.current = false;
-      zoomMapRef.current?.resetZoom();
-    }
-  }, [st.phase]);
 
   // Clear the claimed-territory highlight when leaving the CLAIMING sub-phase
   React.useEffect(() => {
@@ -843,6 +814,7 @@ function PlayScreen() {
   React.useEffect(() => {
     if (prevCaptureContext.current !== null && st.captureContext === null) {
       setShowDice(false);
+      setSelection({ phase: 'none' });
     }
     prevCaptureContext.current = st.captureContext;
   }, [st.captureContext]);
@@ -1028,10 +1000,8 @@ function PlayScreen() {
     if (logHighlightedIds.size > 0) { setLogHighlightedIds(new Set()); setSelectedEventId(null); }
 
     if (!territory) {
-      // Background tap or dimmed territory — deselect everything and reset zoom
       if (selection.phase !== 'none') {
         setSelection({ phase: 'none' });
-        zoomMapRef.current?.resetZoom();
       }
       return;
     }
@@ -1093,31 +1063,6 @@ function PlayScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Chips row — only rendered when at least one chip is visible */}
-      {(st.mode === 'mission' && activePlayer.mission || !isWide) && (
-        <View style={[styles.topBarActions, { borderBottomWidth: 1, borderColor: colors.border }]}>
-          {st.mode === 'mission' && activePlayer.mission && (
-            <Pressable
-              onPress={() => setShowMission(true)}
-              style={[styles.topChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            >
-              <Text variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>
-                {t('game.viewMission')}
-              </Text>
-            </Pressable>
-          )}
-          {!isWide && (
-            <Pressable
-              onPress={() => setLogOpen(v => !v)}
-              style={[styles.topChip, { backgroundColor: logOpen ? colors.primary : colors.surface, borderColor: colors.border }]}
-            >
-              <Text variant="caption" style={{ color: logOpen ? '#fff' : colors.text, fontWeight: '700' }}>
-                {t('game.logLabel')}{reinforcementLog.length > 0 ? ` · ${reinforcementLog.length}` : ''}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      )}
 
       {/* Map + optional wide-screen log sidebar */}
       <View style={styles.mapRow}>
@@ -1169,20 +1114,16 @@ function PlayScreen() {
           setViewingPlayerId(playerId);
           setShowCards(true);
         }}
+        onShowMission={st.mode === 'mission' && activePlayer.mission ? () => setShowMission(true) : undefined}
+        onToggleLog={!isWide ? () => setLogOpen(v => !v) : undefined}
+        logOpen={logOpen}
+        logBadge={reinforcementLog.length}
       />
 
       <BattleResultPanel
         result={showDice ? st.lastBattleResult : null}
         attackerName={battlePlayersRef.current.attackerName}
         defenderName={battlePlayersRef.current.defenderName}
-        canAttackAgain={
-          showDice &&
-          !st.captureContext &&
-          selection.phase === 'ATTACK_TO' &&
-          (st.territories[selection.from]?.armies ?? 0) >= 2
-        }
-        onAttackAgain={() => setShowDice(false)}
-        onDismiss={() => setShowDice(false)}
         isWide={isWide}
       />
 
