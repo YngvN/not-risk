@@ -200,7 +200,11 @@
     "connectAsHost": "Koble til som vert",
     "localBadge": "LOKAL",
     "showQr": "Vis QR-kode",
-    "tapToEnlarge": "Trykk for å forstørre"
+    "tapToEnlarge": "Trykk for å forstørre",
+    "copyUrl": "Kopier",
+    "copied": "Kopiert!",
+    "paste": "Lim inn",
+    "joinHint": "Skann QR-koden på vertens skjerm, og lim inn adressen nedenfor."
   },
   "world": {
     "title": "Verden",

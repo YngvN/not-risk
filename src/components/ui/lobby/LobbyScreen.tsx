@@ -8,6 +8,7 @@ import { useLanguage } from '../../../hooks/useLanguage';
 import { useMultiplayer } from '../../../context/MultiplayerContext';
 import { Spacing, BorderRadius } from '../../../constants/spacing';
 import type { GameStartConfig } from '../../../services/MultiplayerService';
+import { multiplayerService } from '../../../services/MultiplayerService';
 import type { PlayerColor } from '../../../engine/types';
 
 type Tab = 'host' | 'join';
@@ -21,7 +22,7 @@ export function LobbyScreen() {
   const { t } = useLanguage();
   const {
     status, myId, isAdmin, serverIp, serverPort,
-    lobbyPlayers, droppedPlayer,
+    lobbyPlayers, lobbyConfig, droppedPlayer,
     connect, disconnect, markReady, startGame, sendDisconnectChoice,
   } = useMultiplayer();
 
@@ -29,6 +30,10 @@ export function LobbyScreen() {
 
   const handleConnect = (host: string, port: number, name: string, color: PlayerColor) => {
     connect(host, port, name, color);
+  };
+
+  const handleConfigChange = (config: GameStartConfig) => {
+    multiplayerService.send({ type: 'SET_CONFIG', config });
   };
 
   const handleStart = (config: GameStartConfig) => {
@@ -70,6 +75,7 @@ export function LobbyScreen() {
           isAdmin={isAdmin}
           onConnect={handleConnect}
           onDisconnect={disconnect}
+          onConfigChange={handleConfigChange}
           onStart={handleStart}
           onDisconnectChoice={sendDisconnectChoice}
         />
@@ -77,6 +83,7 @@ export function LobbyScreen() {
         <JoinPanel
           status={status}
           players={lobbyPlayers}
+          lobbyConfig={lobbyConfig}
           myId={myId}
           onConnect={handleConnect}
           onReady={markReady}

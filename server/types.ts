@@ -27,6 +27,7 @@ export interface GameStartConfig {
 export type ClientMsg =
   | { type: 'JOIN'; name: string; color: PlayerColor }
   | { type: 'READY' }
+  | { type: 'SET_CONFIG'; config: GameStartConfig }
   | { type: 'START'; config: GameStartConfig }
   | { type: 'ACTION'; action: GameAction }
   | { type: 'DISCONNECT_CHOICE'; choice: 'ai' | 'pause' };
@@ -35,7 +36,7 @@ export type ClientMsg =
 
 export type ServerMsg =
   | { type: 'WELCOME'; yourId: PlayerId; isAdmin: boolean; serverIp: string; serverPort: number }
-  | { type: 'LOBBY'; players: LobbyPlayer[] }
+  | { type: 'LOBBY'; players: LobbyPlayer[]; config: GameStartConfig | null }
   | { type: 'GAME_START'; state: GameState; playerIdMap: Record<string, string>; localGamePlayerIds: string[] }
   | { type: 'STATE'; state: GameState }
   | { type: 'PLAYER_DROPPED'; playerId: PlayerId; isAdmin: boolean; waitSeconds: number }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Pressable, StyleSheet, TextInput, Alert } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+import * as Clipboard from 'expo-clipboard';
+import { QrCode } from '../QrCode';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../Text';
 import { Button } from '../Button';
@@ -30,6 +31,7 @@ interface Props {
   isAdmin: boolean;
   onConnect: (host: string, port: number, name: string, color: PlayerColor) => void;
   onDisconnect: () => void;
+  onConfigChange: (config: GameStartConfig) => void;
   onStart: (config: GameStartConfig) => void;
   onDisconnectChoice: (choice: 'ai' | 'pause') => void;
 }
@@ -59,7 +61,7 @@ function Checkbox({ checked, onToggle, label }: { checked: boolean; onToggle: ()
  */
 export function HostPanel({
   status, serverIp, serverPort, players, droppedPlayerId,
-  isAdmin, onConnect, onDisconnect, onStart, onDisconnectChoice,
+  isAdmin, onConnect, onDisconnect, onConfigChange, onStart, onDisconnectChoice,
 }: Props) {
   const { colors } = useTheme();
   const { t } = useLanguage();
@@ -70,6 +72,13 @@ export function HostPanel({
   const [name, setName] = useState('');
 
   const [showQr, setShowQr] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyUrl = async (url: string) => {
+    await Clipboard.setStringAsync(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
   const [gameMode, setGameMode] = useState<GameMode>('classic');
   const [randomDeal, setRandomDeal] = useState(false);
   const [randomPlacement, setRandomPlacement] = useState(false);
@@ -79,9 +88,11 @@ export function HostPanel({
   const connected = status === 'connected';
 
   // Prefer the server's WELCOME IP; fall back to what the user typed.
-  const displayIp   = serverIp ?? host;
-  const displayPort = serverIp ? serverPort : (Number(port) || 8080);
-  const deepLink    = displayIp ? `frisky://join?host=${displayIp}&port=${displayPort}` : null;
+  const displayIp      = serverIp ?? host;
+  const displayPort    = serverIp ? serverPort : (Number(port) || 8080);
+  // Plain "IP:PORT" string — no URL scheme so cameras show it as copyable text,
+  // and it works without the app being registered as a URL scheme handler.
+  const serverAddress  = displayIp ? `${displayIp}:${displayPort}` : null;
 
   const takenColors   = [...players.map(p => p.color), ...localSlots.map(s => s.color), ...aiSlots.map(s => s.color)];
   const totalPlayers  = players.length + localSlots.length + aiSlots.length;
@@ -116,6 +127,19 @@ export function HostPanel({
       aiSlots: aiSlots.map(s => ({ name: s.name || t('game.aiLabel'), color: s.color, difficulty: s.difficulty })),
     });
   };
+
+  // Broadcast config to all lobby members whenever the host changes anything
+  React.useEffect(() => {
+    if (!connected) return;
+    onConfigChange({
+      mode: gameMode,
+      setupMode: randomDeal ? 'random' : 'claim',
+      randomPlacement,
+      localSlots: localSlots.map(s => ({ name: s.name || '', color: s.color })),
+      aiSlots: aiSlots.map(s => ({ name: s.name || '', color: s.color, difficulty: s.difficulty })),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, gameMode, randomDeal, randomPlacement, localSlots, aiSlots]);
 
   React.useEffect(() => {
     if (!droppedPlayerId || !isAdmin) return;
@@ -169,36 +193,56 @@ export function HostPanel({
     <View style={styles.container}>
 
       {/* QR — always visible once connected, tap to enlarge */}
-      {deepLink ? (
+      {serverAddress ? (
         <>
           <Pressable
             onPress={() => setShowQr(true)}
             style={[styles.qrInline, { backgroundColor: colors.surface, borderColor: colors.border }]}
           >
             <View style={styles.qrBox}>
-              <QRCode value={deepLink} size={110} />
+              <QrCode value={serverAddress} size={110} />
             </View>
             <View style={styles.qrInfo}>
               <Text variant="label" style={{ color: colors.text }}>{t('lobby.scanToJoin')}</Text>
               <Text variant="body" style={{ color: colors.text, fontVariant: ['tabular-nums'] }}>
-                {displayIp}:{displayPort}
+                {serverAddress}
               </Text>
-              <View style={styles.qrHint}>
-                <Ionicons name="expand-outline" size={12} color={colors.primary} />
-                <Text variant="caption" style={{ color: colors.primary }}>{t('lobby.tapToEnlarge')}</Text>
-              </View>
+              <Pressable onPress={() => copyUrl(serverAddress)} style={styles.qrHint}>
+                <Ionicons
+                  name={copied ? 'checkmark-outline' : 'copy-outline'}
+                  size={12}
+                  color={copied ? colors.success : colors.primary}
+                />
+                <Text variant="caption" style={{ color: copied ? colors.success : colors.primary }}>
+                  {copied ? t('lobby.copied') : t('lobby.copyUrl')}
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => setShowQr(true)} style={styles.qrHint}>
+                <Ionicons name="expand-outline" size={12} color={colors.textSecondary} />
+                <Text variant="caption" style={{ color: colors.textSecondary }}>{t('lobby.tapToEnlarge')}</Text>
+              </Pressable>
             </View>
           </Pressable>
 
           <Modal visible={showQr} onClose={() => setShowQr(false)} title={t('lobby.scanToJoin')}>
             <View style={styles.qrModalContent}>
               <View style={styles.qrModalBox}>
-                <QRCode value={deepLink} size={220} />
+                <QrCode value={serverAddress} size={220} />
               </View>
               <Text variant="caption" style={{ color: colors.textSecondary }}>{t('lobby.orEnterManually')}</Text>
               <Text variant="body" style={{ color: colors.text, fontVariant: ['tabular-nums'] }}>
-                {displayIp}:{displayPort}
+                {serverAddress}
               </Text>
+              <Pressable onPress={() => copyUrl(serverAddress)} style={styles.copyBtn}>
+                <Ionicons
+                  name={copied ? 'checkmark-outline' : 'copy-outline'}
+                  size={16}
+                  color={copied ? colors.success : colors.primary}
+                />
+                <Text variant="body" style={{ color: copied ? colors.success : colors.primary, fontWeight: '600' }}>
+                  {copied ? t('lobby.copied') : t('lobby.copyUrl')}
+                </Text>
+              </Pressable>
             </View>
           </Modal>
         </>
@@ -366,6 +410,7 @@ const styles = StyleSheet.create({
   qrHint:         { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   qrModalContent: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.md },
   qrModalBox:     { padding: Spacing.sm, backgroundColor: '#ffffff', borderRadius: BorderRadius.md },
+  copyBtn:        { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.xs },
   modeRow:        { flexDirection: 'row', gap: Spacing.sm },
   modeBtn:        { flex: 1, paddingVertical: Spacing.sm, borderRadius: BorderRadius.md, borderWidth: 1, alignItems: 'center' },
   checkboxRow:    { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },

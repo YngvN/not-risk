@@ -200,7 +200,11 @@
     "connectAsHost": "Connect as Host",
     "localBadge": "LOCAL",
     "showQr": "Show QR Code",
-    "tapToEnlarge": "Tap to enlarge"
+    "tapToEnlarge": "Tap to enlarge",
+    "copyUrl": "Copy",
+    "copied": "Copied!",
+    "paste": "Paste",
+    "joinHint": "Scan the QR code on the host's screen, then paste the address below."
   },
   "world": {
     "title": "World",

@@ -1,5 +1,5 @@
 import type { PlayerId, PlayerColor } from '../src/engine/types';
-import type { LobbyPlayer, ServerMsg } from './types';
+import type { LobbyPlayer, ServerMsg, GameStartConfig } from './types';
 
 const MAX_PLAYERS = 6;
 const RECONNECT_TIMEOUT_MS = 60_000;
@@ -9,10 +9,11 @@ interface Slot {
   reconnectTimer?: ReturnType<typeof setTimeout>;
 }
 
-/** Manages pre-game lobby state: player slots, ready flags, and admin role. */
+/** Manages pre-game lobby state: player slots, ready flags, admin role, and game config. */
 export class LobbyManager {
   private readonly slots = new Map<PlayerId, Slot>();
   private nextId = 1;
+  private _config: GameStartConfig | null = null;
 
   private readonly _send: (playerId: PlayerId, msg: ServerMsg) => void;
   private readonly _broadcast: (msg: ServerMsg) => void;
@@ -32,6 +33,15 @@ export class LobbyManager {
     }
     this.slots.clear();
     this.nextId = 1;
+    this._config = null;
+  }
+
+  get config(): GameStartConfig | null { return this._config; }
+
+  /** Stores the host's current game config and broadcasts it to all players. */
+  setConfig(config: GameStartConfig): void {
+    this._config = config;
+    this._broadcast({ type: 'LOBBY', players: this.players, config: this._config });
   }
 
   get isFull(): boolean { return this.slots.size >= MAX_PLAYERS; }
@@ -57,7 +67,7 @@ export class LobbyManager {
     this.slots.set(id, { player: { id, name, color, isAdmin, isReady: false, connected: true } });
 
     this._send(id, { type: 'WELCOME', yourId: id, isAdmin, serverIp, serverPort });
-    this._broadcast({ type: 'LOBBY', players: this.players });
+    this._broadcast({ type: 'LOBBY', players: this.players, config: this._config });
     return id;
   }
 
@@ -65,7 +75,7 @@ export class LobbyManager {
     const slot = this.slots.get(playerId);
     if (!slot) return;
     slot.player.isReady = true;
-    this._broadcast({ type: 'LOBBY', players: this.players });
+    this._broadcast({ type: 'LOBBY', players: this.players, config: this._config });
   }
 
   /**
@@ -78,7 +88,7 @@ export class LobbyManager {
 
     slot.player.connected = false;
     this._broadcast({ type: 'PLAYER_DROPPED', playerId, isAdmin: slot.player.isAdmin, waitSeconds: RECONNECT_TIMEOUT_MS / 1000 });
-    this._broadcast({ type: 'LOBBY', players: this.players });
+    this._broadcast({ type: 'LOBBY', players: this.players, config: this._config });
 
     if (slot.player.isAdmin) {
       slot.reconnectTimer = setTimeout(() => {
@@ -100,7 +110,7 @@ export class LobbyManager {
     }
     slot.player.connected = true;
     this._broadcast({ type: 'PLAYER_RECONNECTED', playerId });
-    this._broadcast({ type: 'LOBBY', players: this.players });
+    this._broadcast({ type: 'LOBBY', players: this.players, config: this._config });
     return true;
   }
 
@@ -117,7 +127,7 @@ export class LobbyManager {
     this.slots.delete(playerId);
     if (this.slots.size === 0) return null;
     if (wasAdmin) return this.promoteNextAdmin();
-    this._broadcast({ type: 'LOBBY', players: this.players });
+    this._broadcast({ type: 'LOBBY', players: this.players, config: this._config });
     return this.adminId;
   }
 
@@ -126,7 +136,7 @@ export class LobbyManager {
       if (slot.player.connected) {
         slot.player.isAdmin = true;
         this._broadcast({ type: 'HOST_CHANGED', newAdminId: id });
-        this._broadcast({ type: 'LOBBY', players: this.players });
+        this._broadcast({ type: 'LOBBY', players: this.players, config: this._config });
         return id;
       }
     }

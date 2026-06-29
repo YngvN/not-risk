@@ -1,3 +1,4 @@
+import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import os from 'os';
 import { LobbyManager } from './LobbyManager';
@@ -8,17 +9,68 @@ import type { PlayerId } from '../src/engine/types';
 const PORT = Number(process.env.PORT ?? 8080);
 
 function getLanIp(): string {
-  const ifaces = os.networkInterfaces();
-  for (const iface of Object.values(ifaces)) {
+  const candidates: string[] = [];
+  for (const iface of Object.values(os.networkInterfaces())) {
     for (const alias of iface ?? []) {
-      if (alias.family === 'IPv4' && !alias.internal) return alias.address;
+      if (alias.family !== 'IPv4' || alias.internal) continue;
+      if (alias.address === '0.0.0.0') continue;
+      if (alias.address.startsWith('169.254.')) continue;
+      candidates.push(alias.address);
     }
   }
-  return '127.0.0.1';
+  const lan = candidates.find(a =>
+    a.startsWith('192.168.') ||
+    a.startsWith('10.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(a),
+  );
+  return lan ?? candidates[0] ?? '127.0.0.1';
 }
 
 const serverIp = getLanIp();
-const wss = new WebSocketServer({ port: PORT });
+
+// Serve a helpful HTML page when someone opens the address in a browser.
+// This happens when the phone camera taps the QR code text as a link.
+function joinPage(ip: string, port: number): string {
+  const deepLink = `frisky://join?host=${ip}&port=${port}`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Join fRISKy game</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; text-align: center;
+           padding: 2rem; background: #1a1a2e; color: #eee; }
+    h1   { color: #6c63ff; }
+    .addr { font-size: 1.5rem; font-weight: bold; letter-spacing: .05em;
+            background: #16213e; padding: .75rem 1.5rem; border-radius: 8px;
+            display: inline-block; margin: 1rem 0; }
+    a.btn { display: inline-block; margin-top: 1.5rem; padding: .75rem 2rem;
+            background: #6c63ff; color: #fff; border-radius: 8px;
+            text-decoration: none; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <h1>fRISKy LAN game</h1>
+  <p>Open the <strong>fRISKy</strong> app, go to <strong>LAN → Join</strong> and enter:</p>
+  <div class="addr">${ip}:${port}</div>
+  <br />
+  <a class="btn" href="${deepLink}">Open in app</a>
+  <p style="margin-top:2rem;font-size:.85rem;opacity:.6">
+    (The "Open in app" link only works if the app is installed as a native build.)
+  </p>
+</body>
+</html>`;
+}
+
+// Use a real HTTP server so browser visits get a helpful page instead of
+// the raw WebSocket 426 "Upgrade Required" error.
+const httpServer = http.createServer((_req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(joinPage(serverIp, PORT));
+});
+
+const wss = new WebSocketServer({ server: httpServer });
 
 const wsToPlayer = new Map<WebSocket, PlayerId>();
 const playerToWs = new Map<PlayerId, WebSocket>();
@@ -39,7 +91,6 @@ const lobby = new LobbyManager(send, broadcast);
 const game = new GameServer(broadcast, send);
 let gameStarted = false;
 
-/** Full server reset — clears all state so a fresh lobby can begin. */
 function resetServer(): void {
   gameStarted = false;
   game.reset();
@@ -60,7 +111,6 @@ wss.on('connection', ws => {
     switch (msg.type) {
       case 'JOIN': {
         if (gameStarted) {
-          // Reconnect: match by name + color
           const dropped = lobby.players.find(
             p => !p.connected && p.name === msg.name && p.color === msg.color,
           );
@@ -92,6 +142,11 @@ wss.on('connection', ws => {
         break;
       }
 
+      case 'SET_CONFIG': {
+        if (playerId && playerId === lobby.adminId) lobby.setConfig(msg.config);
+        break;
+      }
+
       case 'START': {
         if (!playerId || playerId !== lobby.adminId || gameStarted) return;
         gameStarted = true;
@@ -112,7 +167,6 @@ wss.on('connection', ws => {
           game.handToAI(dropped.id);
           game.resume();
         }
-        // 'pause' keeps the game paused until the player reconnects
         break;
       }
     }
@@ -125,7 +179,6 @@ wss.on('connection', ws => {
     playerToWs.delete(playerId);
 
     if (!gameStarted) {
-      // Pre-game: remove slot immediately — no reconnect window in the lobby.
       const remaining = lobby.removePlayer(playerId);
       if (remaining === null) {
         console.log('[fRISKy server] Last player left lobby — resetting.');
@@ -143,5 +196,9 @@ wss.on('connection', ws => {
   });
 });
 
-console.log(`\n[fRISKy server] Listening on ws://${serverIp}:${PORT}`);
-console.log(`[fRISKy server] Deep link: frisky://join?host=${serverIp}&port=${PORT}\n`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n[fRISKy server] Listening on port ${PORT}`);
+  console.log(`[fRISKy server] LAN  : http://${serverIp}:${PORT}  (open in browser for join instructions)`);
+  console.log(`[fRISKy server] Local: http://localhost:${PORT}`);
+  console.log(`[fRISKy server] → Enter "${serverIp}" on phones, "localhost" in the app on this machine\n`);
+});

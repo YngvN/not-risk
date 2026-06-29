@@ -20,6 +20,7 @@ interface MultiplayerContextValue {
   serverIp: string | null;
   serverPort: number;
   lobbyPlayers: LobbyPlayer[];
+  lobbyConfig: GameStartConfig | null;
   droppedPlayer: DroppedPlayer | null;
   /** Connect to the server and announce ourselves with the given name/color. */
   connect: (host: string, port: number, name: string, color: PlayerColor) => void;
@@ -48,6 +49,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
   const [serverIp, setServerIp] = useState<string | null>(null);
   const [serverPort, setServerPort] = useState(8080);
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
+  const [lobbyConfig, setLobbyConfig] = useState<GameStartConfig | null>(null);
   const [droppedPlayer, setDroppedPlayer] = useState<DroppedPlayer | null>(null);
   const [myGamePlayerId, setMyGamePlayerId] = useState<string | null>(null);
   const [localGamePlayerIds, setLocalGamePlayerIds] = useState<string[]>([]);
@@ -76,7 +78,10 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
         setServerPort(msg.serverPort);
       }),
 
-      multiplayerService.on('LOBBY', msg => setLobbyPlayers(msg.players)),
+      multiplayerService.on('LOBBY', msg => {
+        setLobbyPlayers(msg.players);
+        setLobbyConfig(msg.config);
+      }),
 
       multiplayerService.on('HOST_CHANGED', msg => {
         setIsAdmin(prev => {
@@ -121,6 +126,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     setIsAdmin(false);
     setServerIp(null);
     setLobbyPlayers([]);
+    setLobbyConfig(null);
     setDroppedPlayer(null);
     pendingJoin.current = null;
   }, []);
@@ -147,7 +153,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     <MultiplayerContext.Provider value={{
       status, myId, myGamePlayerId, localGamePlayerIds,
       isAdmin, serverIp, serverPort,
-      lobbyPlayers, droppedPlayer,
+      lobbyPlayers, lobbyConfig, droppedPlayer,
       connect, disconnect, markReady, startGame,
       sendDisconnectChoice, registerStateHandler, sendAction,
     }}>
