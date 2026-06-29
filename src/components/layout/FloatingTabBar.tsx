@@ -47,13 +47,16 @@ export function FloatingTabBar() {
   const { t }      = useLanguage();
   const { state, resetGame } = useGame();
 
-  const isHome = pathname === '/' || pathname === '';
-  const hasGame = state !== null;
+  const isHome    = pathname === '/' || pathname === '';
+  const isInGame  = pathname.startsWith('/game');
+  const hasGame   = state !== null;
 
   if (isHome) return null;
 
   const fabBottom   = insets.bottom + MARGIN;
+  const fabTop      = insets.top + MARGIN;
   const panelBottom = fabBottom + FAB_SIZE + MARGIN;
+  const panelTop    = fabTop + FAB_SIZE + MARGIN;
 
   const navigate = (path: string) => {
     setOpen(false);
@@ -84,22 +87,20 @@ export function FloatingTabBar() {
         )}
       </AnimatePresence>
 
-      {/* Slide-up nav panel */}
+      {/* Nav panel — slides up from bottom or down from top depending on FAB position */}
       <AnimatePresence>
         {open && (
           <MotiView
-            from={{ translateY: 320 }}
+            from={{ translateY: isInGame ? -320 : 320 }}
             animate={{ translateY: 0 }}
-            exit={{ translateY: 420 }}
+            exit={{ translateY: isInGame ? -420 : 420 }}
             transition={{ type: 'spring', damping: 22, stiffness: 260 }}
             style={[
               styles.panel,
-              {
-                bottom: panelBottom,
-                left: MARGIN,
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-              },
+              isInGame
+                ? { top: panelTop, left: MARGIN }
+                : { bottom: panelBottom, left: MARGIN },
+              { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
             {TABS.map(tab => {
@@ -143,10 +144,14 @@ export function FloatingTabBar() {
         )}
       </AnimatePresence>
 
-      {/* FAB */}
+      {/* FAB — top-left in-game, bottom-left elsewhere */}
       <Pressable
         onPress={() => setOpen(v => !v)}
-        style={[styles.fab, { bottom: fabBottom, left: MARGIN, backgroundColor: colors.card, borderColor: colors.border }]}
+        style={[
+          styles.fab,
+          isInGame ? { top: fabTop, left: MARGIN } : { bottom: fabBottom, left: MARGIN },
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
       >
         <Ionicons name={open ? 'close' : 'ellipsis-horizontal'} size={22} color={colors.text} />
       </Pressable>
