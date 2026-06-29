@@ -12,7 +12,7 @@ import { Spacing } from '../../src/constants/spacing';
 export default function SettingsScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { t, language, setLanguage, availableLanguages } = useLanguage();
-  const { showAllMissions, setShowAllMissions, allowMapEditing, setAllowMapEditing } = useTesting();
+  const { showAllMissions, setShowAllMissions, allowMapEditing, setAllowMapEditing, showTestBorders, setShowTestBorders } = useTesting();
   const { restore: restoreLabels } = useLabelPositions();
   const router = useRouter();
 
@@ -103,6 +103,19 @@ export default function SettingsScreen() {
           <Switch
             value={allowMapEditing}
             onValueChange={setAllowMapEditing}
+            trackColor={{ false: colors.border, true: colors.primary }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
+        <View style={[styles.divider, { borderTopColor: colors.border }]} />
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text>{t('settings.showTestBorders')}</Text>
+            <Text variant="caption" secondary>{t('settings.showTestBordersHint')}</Text>
+          </View>
+          <Switch
+            value={showTestBorders}
+            onValueChange={setShowTestBorders}
             trackColor={{ false: colors.border, true: colors.primary }}
             thumbColor="#FFFFFF"
           />

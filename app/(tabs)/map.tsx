@@ -37,6 +37,8 @@ export default function MapScreen() {
     scale: import('react-native-reanimated').SharedValue<number>;
     tx: import('react-native-reanimated').SharedValue<number>;
     ty: import('react-native-reanimated').SharedValue<number>;
+    containerHeight: import('react-native-reanimated').SharedValue<number>;
+    contentHeight: import('react-native-reanimated').SharedValue<number>;
   } | null>(null);
 
   const showRisk = view === 'pacific' ? pacificRisk : view === 'africa' ? africaRisk : boardRisk;
@@ -65,7 +67,7 @@ export default function MapScreen() {
   React.useEffect(() => {
     if (editMode !== 'placement' || mapWidth === 0 || editInitialized.current) return;
     editInitialized.current = true;
-    const svgH = mapWidth * (614 / 714);
+    const svgH = mapWidth * (614 / 914);
     editMapRef.current?.setContentHeight(svgH);
     setEditTransform(editMapRef.current?.getTransform() ?? null);
   }, [editMode, mapWidth]);

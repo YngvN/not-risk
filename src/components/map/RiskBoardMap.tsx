@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import Svg, { G, Path, Text as SvgText, Circle, Rect } from 'react-native-svg';
+import { useTesting } from '../../context/TestingContext';
+import Svg, { Defs, ClipPath, G, Path, Text as SvgText, Circle, Rect } from 'react-native-svg';
 import Animated, {
   useAnimatedProps,
   useSharedValue,
@@ -28,8 +29,11 @@ const AnimatedG    = Animated.createAnimatedComponent(G);
  * The SVG declared width/height (749×519) is smaller than the actual content
  * which extends to ~x=900 (Asia/Pacific wrapping right).
  */
-const VIEWBOX = '191 60 714 614';
-const VIEWBOX_ASPECT = 714 / 614;
+// 100 SVG units of ocean padding added on each side so edge territories
+// (Alaska, Kamchatka) can be panned to the screen centre and so the
+// Alaska→Asia dashed path (x≈178) is fully inside the viewBox.
+const VIEWBOX = '91 60 914 614';
+const VIEWBOX_ASPECT = 914 / 614;
 
 /**
  * Maps Risk_board.svg path IDs → TerritoryId.
@@ -230,6 +234,7 @@ export function RiskBoardMap({
   labelOverrides,
 }: RiskBoardMapProps) {
   const { colors } = useTheme();
+  const { showTestBorders } = useTesting();
   const [selectedSvgId,  setSelectedSvgId]  = useState<string | null>(null);
   // elevatedSvgId stays set until the spring-back animation completes so the
   // territory keeps rendering on top (last in SVG paint order) during deselection.
@@ -282,16 +287,22 @@ export function RiskBoardMap({
   };
 
   return (
-    // overflow:hidden clips the Alaska→Kamchatka dashed paths that extend
-    // beyond the viewBox, keeping the rendered height exactly at the aspect ratio.
-    <View style={{ width: '100%', aspectRatio: VIEWBOX_ASPECT, overflow: 'hidden' }}>
+    <View style={[{ width: '100%', aspectRatio: VIEWBOX_ASPECT }, showTestBorders && { borderWidth: 3, borderColor: '#00cc44' }]}>
     <Svg viewBox={VIEWBOX} width="100%" height="100%">
-      {/* Transparent hit-target covering the full viewBox — catches ocean taps to deselect. */}
-      <Rect x={191} y={60} width={714} height={614} fill="transparent" onPress={handleBackgroundPress} />
+      {/* ClipPath constrains ALL content to the viewBox so the Alaska→Kamchatka
+          dashed paths don't overflow onto the screen outside the map boundary. */}
+      <Defs>
+        <ClipPath id="mapclip">
+          <Rect x={91} y={60} width={914} height={614} />
+        </ClipPath>
+      </Defs>
 
-      {/* Dotted connection indicators — rendered BELOW territories so territory
-          fills sit on top. fill="none" prevents enclosed areas from painting
-          over map content; only the stroke/dot outlines are visible in ocean gaps. */}
+      {/* Transparent hit-target covering the full viewBox — catches ocean taps to deselect. */}
+      <Rect x={91} y={60} width={914} height={614} fill="transparent" onPress={handleBackgroundPress} />
+
+      {/* Dotted connection indicators rendered OUTSIDE the clip group so the
+          Alaska→Asia path (which reaches x≈178, inside the padded viewBox)
+          is always fully visible. */}
       {RISK_BOARD_DASHED_PATHS.map((d, i) => (
         <Path
           key={`dash-${i}`}
@@ -303,6 +314,8 @@ export function RiskBoardMap({
           pointerEvents="none"
         />
       ))}
+
+      <G clipPath="url(#mapclip)">
 
       {/* Territory fills — elevated territory sorted last so it paints on top */}
       {(elevatedSvgId
@@ -360,6 +373,7 @@ export function RiskBoardMap({
         );
       })}
 
+      </G>
     </Svg>
     </View>
   );

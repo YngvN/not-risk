@@ -8,15 +8,18 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
-// The RiskBoardMap SVG viewBox starts at x=191, y=60 and spans 714×614 units.
-const VB_X = 191;
+// The RiskBoardMap SVG viewBox starts at x=91, y=60 and spans 914×614 units.
+// (100 SVG units of ocean padding added on each side.)
+const VB_X = 91;
 const VB_Y = 60;
-const VB_W = 714;
+const VB_W = 914;
 
 interface Transform {
   scale: SharedValue<number>;
   tx: SharedValue<number>;
   ty: SharedValue<number>;
+  containerHeight: SharedValue<number>;
+  contentHeight: SharedValue<number>;
 }
 
 interface Props {
@@ -56,6 +59,8 @@ export function LabelEditor({ positions, mapWidth, transform, onUpdate }: Props)
           svgY={pos.y}
           naturalScale={naturalScale}
           zoomScale={transform.scale}
+          containerHeight={transform.containerHeight}
+          contentHeight={transform.contentHeight}
           onDragEnd={onUpdate}
         />
       ))}
@@ -73,10 +78,14 @@ interface HandleProps {
   naturalScale: number;
   /** Current ZoomableMap zoom — corrects drag delta sensitivity. */
   zoomScale: SharedValue<number>;
+  /** ZoomableMap container height — used to compute vertical centering offset. */
+  containerHeight: SharedValue<number>;
+  /** SVG natural height within ZoomableMap — used to compute vertical centering offset. */
+  contentHeight: SharedValue<number>;
   onDragEnd: (svgId: string, x: number, y: number) => void;
 }
 
-function Handle({ svgId, svgX, svgY, naturalScale, zoomScale, onDragEnd }: HandleProps) {
+function Handle({ svgId, svgX, svgY, naturalScale, zoomScale, containerHeight, contentHeight, onDragEnd }: HandleProps) {
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
   const currentX = useSharedValue(svgX);
@@ -107,9 +116,14 @@ function Handle({ svgId, svgX, svgY, naturalScale, zoomScale, onDragEnd }: Handl
     transform: [{ translateX: tx.value }, { translateY: ty.value }],
   }));
 
-  // Natural-zoom screen position of the handle centre
+  // When the SVG is shorter than the ZoomableMap container, justifyContent:center
+  // offsets the SVG down by (containerHeight - contentHeight) / 2 within the
+  // Animated.View. Handles must include this offset so they align with the labels.
+  const verticalOffset = Math.max(0, (containerHeight.value - contentHeight.value) / 2);
+
+  // Natural-zoom screen position of the handle centre (within the absoluteFill overlay)
   const screenX = (svgX - VB_X) * naturalScale;
-  const screenY = (svgY - VB_Y) * naturalScale;
+  const screenY = verticalOffset + (svgY - VB_Y) * naturalScale;
 
   return (
     <Animated.View

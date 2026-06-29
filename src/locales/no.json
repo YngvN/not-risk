@@ -31,6 +31,8 @@
     "allowMapEditing": "Tillat kartredigering",
     "allowMapEditingHint": "Viser verktøy for plassering og tilkoblinger i Se kart.",
     "restoreLabelPositions": "Gjenopprett originale etikett-posisjoner",
+    "showTestBorders": "Legg til testgrenser i viewbox",
+    "showTestBordersHint": "Tegner fargede rammer på viktige kartbeholdere: rød = ZoomableMap klipgrense, blå = transformasjonsinnhold, grønn = SVG-aspektforhold.",
     "editLabelPlacement": "Rediger etikett-plassering",
     "editConnections": "Rediger tilkoblinger",
     "savePositions": "Lagre",

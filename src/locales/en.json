@@ -31,6 +31,8 @@
     "allowMapEditing": "Allow map editing",
     "allowMapEditingHint": "Shows placement and connection editing tools in View Maps.",
     "restoreLabelPositions": "Restore original label positions",
+    "showTestBorders": "Add test borders to viewbox",
+    "showTestBordersHint": "Draws coloured outlines on key map containers: red = ZoomableMap clip boundary, blue = transform content, green = SVG aspect-ratio frame.",
     "editLabelPlacement": "Edit label placement",
     "editConnections": "Edit connections",
     "savePositions": "Save",

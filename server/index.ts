@@ -172,10 +172,13 @@ wss.on('connection', ws => {
           return;
         }
 
-        const id = lobby.join(msg.name, msg.color, serverIp, PORT);
-        if (id) {
+        const joined = lobby.join(msg.name, msg.color);
+        if (joined) {
+          const { id, isAdmin } = joined;
           wsToPlayer.set(ws, id);
           playerToWs.set(id, ws);
+          // WELCOME is sent AFTER playerToWs is set so send() can find the socket.
+          send(id, { type: 'WELCOME', yourId: id, isAdmin, serverIp, serverPort: PORT });
         } else {
           ws.send(JSON.stringify({ type: 'ERROR', message: 'Lobby is full' } satisfies ServerMsg));
         }

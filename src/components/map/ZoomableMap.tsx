@@ -25,11 +25,18 @@ export interface ZoomableMapRef {
    * immediately centers the content vertically if it overflows.
    */
   setContentHeight(h: number): void;
-  /** Returns the live transform shared values for external overlays. */
-  getTransform(): { scale: SharedValue<number>; tx: SharedValue<number>; ty: SharedValue<number> };
+  /** Returns the live transform and size shared values for external overlays. */
+  getTransform(): {
+    scale: SharedValue<number>;
+    tx: SharedValue<number>;
+    ty: SharedValue<number>;
+    containerHeight: SharedValue<number>;
+    contentHeight: SharedValue<number>;
+  };
 }
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from '../../hooks/useTheme';
+import { useTesting } from '../../context/TestingContext';
 import { Text } from '../ui/Text';
 import { Spacing, BorderRadius } from '../../constants/spacing';
 
@@ -53,6 +60,7 @@ const SPRING = { damping: 20, stiffness: 220 };
 export const ZoomableMap = forwardRef<ZoomableMapRef, { children: React.ReactNode }>(
 function ZoomableMap({ children }, ref) {
   const { colors } = useTheme();
+  const { showTestBorders } = useTesting();
 
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -240,21 +248,24 @@ function ZoomableMap({ children }, ref) {
     },
     setContentHeight(h: number) {
       contentH.value = h;
-      if (h > ch.value) {
-        const centerTy = -(h - ch.value) / 2;
-        ty.value = centerTy;
-        savedTy.value = centerTy;
-      }
+      // With justifyContent:center in the content style, the SVG is already
+      // visually centred at ty=0 — no translation needed.
+      ty.value = 0;
+      savedTy.value = 0;
     },
     getTransform() {
-      return { scale, tx, ty };
+      return { scale, tx, ty, containerHeight: ch, contentHeight: contentH };
     },
   }));
 
   return (
-    <View ref={containerRef} style={styles.container} onLayout={onLayout}>
+    <View
+      ref={containerRef}
+      style={[styles.container, showTestBorders && { borderWidth: 3, borderColor: '#ff0000' }]}
+      onLayout={onLayout}
+    >
       <GestureDetector gesture={gesture}>
-        <Animated.View style={[styles.content, animatedStyle]}>
+        <Animated.View style={[styles.content, animatedStyle, showTestBorders && { borderWidth: 3, borderColor: '#0088ff' }]}>
           <View onLayout={onContentLayout}>
             {children}
           </View>
@@ -296,6 +307,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    // Center content so the scale transform (anchored at the container centre)
+    // is also anchored at the content centre. Without this, zooming pushes the
+    // top of a short SVG off-screen on phones.
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   zoomButtons: {
     position: 'absolute',

@@ -2,8 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEYS = {
-  showAllMissions: '@testing_show_missions',
-  allowMapEditing: '@testing_allow_map_editing',
+  showAllMissions:  '@testing_show_missions',
+  allowMapEditing:  '@testing_allow_map_editing',
+  showTestBorders:  '@testing_show_borders',
 };
 
 interface TestingContextValue {
@@ -11,6 +12,8 @@ interface TestingContextValue {
   setShowAllMissions: (v: boolean) => void;
   allowMapEditing: boolean;
   setAllowMapEditing: (v: boolean) => void;
+  showTestBorders: boolean;
+  setShowTestBorders: (v: boolean) => void;
 }
 
 const TestingContext = createContext<TestingContextValue | null>(null);
@@ -28,11 +31,16 @@ function usePersistentBool(key: string): [boolean, (v: boolean) => void] {
 }
 
 export function TestingProvider({ children }: { children: React.ReactNode }) {
-  const [showAllMissions, setShowAllMissions] = usePersistentBool(KEYS.showAllMissions);
-  const [allowMapEditing, setAllowMapEditing] = usePersistentBool(KEYS.allowMapEditing);
+  const [showAllMissions,  setShowAllMissions]  = usePersistentBool(KEYS.showAllMissions);
+  const [allowMapEditing,  setAllowMapEditing]  = usePersistentBool(KEYS.allowMapEditing);
+  const [showTestBorders,  setShowTestBorders]  = usePersistentBool(KEYS.showTestBorders);
 
   return (
-    <TestingContext.Provider value={{ showAllMissions, setShowAllMissions, allowMapEditing, setAllowMapEditing }}>
+    <TestingContext.Provider value={{
+      showAllMissions, setShowAllMissions,
+      allowMapEditing, setAllowMapEditing,
+      showTestBorders, setShowTestBorders,
+    }}>
       {children}
     </TestingContext.Provider>
   );

@@ -62,19 +62,20 @@ export class LobbyManager {
   }
 
   /**
-   * Registers a new player and sends them a WELCOME message.
-   * Returns the assigned PlayerId, or null if the lobby is full.
+   * Registers a new player and broadcasts the updated lobby.
+   * Returns the assigned PlayerId and isAdmin flag, or null if the lobby is full.
+   * NOTE: WELCOME must be sent by the caller AFTER it has registered the player's
+   * WebSocket in playerToWs — otherwise _send cannot find the socket.
    */
-  join(name: string, color: PlayerColor, serverIp: string, serverPort: number): PlayerId | null {
+  join(name: string, color: PlayerColor): { id: PlayerId; isAdmin: boolean } | null {
     if (this.isFull) return null;
 
     const id: PlayerId = `p${this.nextId++}`;
     const isAdmin = this.slots.size === 0;
     this.slots.set(id, { player: { id, name, color, isAdmin, isReady: false, connected: true } });
 
-    this._send(id, { type: 'WELCOME', yourId: id, isAdmin, serverIp, serverPort });
     this._broadcast({ type: 'LOBBY', players: this.players, config: this._config });
-    return id;
+    return { id, isAdmin };
   }
 
   setReady(playerId: PlayerId): void {

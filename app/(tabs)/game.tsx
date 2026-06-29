@@ -556,7 +556,7 @@ function PlayScreen() {
   // ── Zoom helpers (attack phase) ───────────────────────────────────────────
 
   /** Risk board SVG viewBox origin and width — must match VIEWBOX in RiskBoardMap.tsx. */
-  const VB = { x: 191, y: 60, w: 714 } as const;
+  const VB = { x: 91, y: 60, w: 914 } as const;
 
   const zoomToTerritory = React.useCallback((from: TerritoryId) => {
     // Collect label positions for the attacker and all its neighbours
