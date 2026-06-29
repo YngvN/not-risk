@@ -15,6 +15,7 @@ import {
   type SelectionMode,
 } from '../../src/components/game';
 import { useGame, PLAYER_COLOR_HEX } from '../../src/context/GameContext';
+import { useMultiplayer } from '../../src/context/MultiplayerContext';
 import { useTesting } from '../../src/context/TestingContext';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useLanguage } from '../../src/hooks/useLanguage';
@@ -29,6 +30,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { pickAiName } from '../../src/constants/aiNames';
 import { pickConquerorName } from '../../src/constants/conquerorNames';
 import { useLabelPositions } from '../../src/hooks/useLabelPositions';
+import { Input } from '../../src/components/ui/Input';
+import { Modal } from '../../src/components/ui/Modal';
+import { QrCode } from '../../src/components/ui/QrCode';
+import type { GameStartConfig } from '../../src/services/MultiplayerService';
+import { multiplayerService } from '../../src/services/MultiplayerService';
 
 const SETUP_KEY = '@last_game_setup';
 
@@ -148,6 +154,11 @@ interface PlayerEntry {
 
 function SetupScreen() {
   const { startGame, hasSavedGame, resumeGame } = useGame();
+  const {
+    status: mpStatus, serverIp, serverPort, lobbyPlayers,
+    connect: mpConnect, disconnect: mpDisconnect,
+    startGame: mpStartGame,
+  } = useMultiplayer();
   const { colors } = useTheme();
   const { t } = useLanguage();
 
@@ -168,6 +179,15 @@ function SetupScreen() {
   const [rules, setRules] = useState<GameRules>(DEFAULT_RULES);
   // Guard: prevents the auto-save from overwriting restored data on first render
   const [setupLoaded, setSetupLoaded] = useState(false);
+
+  // Online mode state
+  const [showOnlineModal, setShowOnlineModal] = useState(false);
+  const [onlineHost, setOnlineHost] = useState('');
+  const [onlinePort, setOnlinePort] = useState('8080');
+  const [onlineName, setOnlineName] = useState('');
+
+  const isOnline = mpStatus === 'connected';
+  const isConnecting = mpStatus === 'connecting';
 
   // Restore last setup on first mount
   React.useEffect(() => {
@@ -237,14 +257,50 @@ function SetupScreen() {
   };
 
   const handleStart = () => {
-    const configs: PlayerConfig[] = players.map(p => ({
-      name: p.name || t('game.humanLabel'),
-      color: p.color,
-      isAI: p.isAI,
-      aiDifficulty: p.isAI ? p.difficulty : undefined,
-    }));
-    startGame(configs, gameMode, randomDeal ? 'random' : 'claim', randomPlacement, rules);
+    const config: GameStartConfig = {
+      mode: gameMode,
+      setupMode: randomDeal ? 'random' : 'claim',
+      randomPlacement,
+      localSlots: players
+        .filter(p => !p.isAI)
+        .map(p => ({ name: p.name || t('game.humanLabel'), color: p.color })),
+      aiSlots: players
+        .filter(p => p.isAI)
+        .map(p => ({ name: p.name || t('game.aiLabel'), color: p.color, difficulty: p.difficulty })),
+    };
+
+    if (isOnline) {
+      mpStartGame(config);
+    } else {
+      const configs: PlayerConfig[] = players.map(p => ({
+        name: p.name || t('game.humanLabel'),
+        color: p.color,
+        isAI: p.isAI,
+        aiDifficulty: p.isAI ? p.difficulty : undefined,
+      }));
+      startGame(configs, gameMode, randomDeal ? 'random' : 'claim', randomPlacement, rules);
+    }
   };
+
+  const handleConnectOnline = () => {
+    mpConnect(onlineHost.trim(), Number(onlinePort) || 8080, onlineName.trim() || t('lobby.defaultName'), players[0]?.color ?? 'red');
+    setShowOnlineModal(false);
+  };
+
+  // Broadcast config to lobby members whenever the host changes anything
+  React.useEffect(() => {
+    if (!isOnline) return;
+    multiplayerService.send({
+      type: 'SET_CONFIG',
+      config: {
+        mode: gameMode,
+        setupMode: randomDeal ? 'random' : 'claim',
+        randomPlacement,
+        localSlots: players.filter(p => !p.isAI).map(p => ({ name: p.name || '', color: p.color })),
+        aiSlots: players.filter(p => p.isAI).map(p => ({ name: p.name || '', color: p.color, difficulty: p.difficulty })),
+      },
+    });
+  }, [isOnline, gameMode, randomDeal, randomPlacement, players]);
 
   const MODES: { id: GameMode; labelKey: Parameters<typeof t>[0] }[] = [
     { id: 'classic', labelKey: 'game.modeClassic' },
@@ -252,9 +308,86 @@ function SetupScreen() {
     { id: 'capital', labelKey: 'game.modeCapital' },
   ];
 
+  const serverAddress = isOnline ? `${serverIp ?? onlineHost}:${serverPort}` : null;
+  const totalPlayers = players.length + lobbyPlayers.length;
+
   return (
     <Screen scrollable>
-      <Text variant="h2" style={{ color: colors.text, marginBottom: Spacing.md }}>{t('game.newGame')}</Text>
+      {/* Title row + Make Online button */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md }}>
+        <Text variant="h2" style={{ color: colors.text, flex: 1 }}>{t('game.newGame')}</Text>
+        {isOnline ? (
+          <Pressable
+            onPress={mpDisconnect}
+            style={[styles.addBtnSmall, { backgroundColor: colors.error + '22', borderColor: colors.error }]}
+          >
+            <Text variant="caption" style={{ color: colors.error, fontWeight: '600' }}>{t('game.goLocal')}</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => setShowOnlineModal(true)}
+            style={[styles.addBtnSmall, { backgroundColor: colors.surface, borderColor: colors.primary }]}
+          >
+            <Ionicons name="wifi-outline" size={13} color={colors.primary} />
+            <Text variant="caption" style={{ color: colors.primary, fontWeight: '600' }}> {t('game.makeOnline')}</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* "Make Online" connection modal */}
+      <Modal visible={showOnlineModal} onClose={() => setShowOnlineModal(false)} title={t('game.makeOnline')}>
+        <View style={{ gap: Spacing.md }}>
+          <Input label={t('lobby.serverIP')} placeholder="192.168.1.42" value={onlineHost}
+            onChangeText={setOnlineHost} keyboardType="numbers-and-punctuation" autoCapitalize="none" autoCorrect={false} />
+          <Input label={t('lobby.port')} placeholder="8080" value={onlinePort}
+            onChangeText={setOnlinePort} keyboardType="number-pad" />
+          <Input label={t('lobby.yourName')} placeholder={t('lobby.namePlaceholder')} value={onlineName}
+            onChangeText={setOnlineName} maxLength={20} />
+          {mpStatus === 'error' && (
+            <Text variant="caption" style={{ color: colors.error }}>{t('lobby.connectionFailed')}</Text>
+          )}
+          <Pressable
+            onPress={handleConnectOnline}
+            disabled={isConnecting || !onlineHost.trim()}
+            style={[styles.startBtn, { backgroundColor: isConnecting || !onlineHost.trim() ? colors.border : colors.primary }]}
+          >
+            <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>
+              {isConnecting ? t('lobby.waitingForServer') : t('lobby.connect')}
+            </Text>
+          </Pressable>
+        </View>
+      </Modal>
+
+      {/* QR code + address when online */}
+      {isOnline && serverAddress && (
+        <View style={[styles.qrRow, { backgroundColor: colors.surface, borderColor: colors.primary }]}>
+          <View style={styles.qrBox}>
+            <QrCode value={serverAddress} size={90} />
+          </View>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text variant="label" style={{ color: colors.text }}>{t('lobby.scanToJoin')}</Text>
+            <Text variant="body" style={{ color: colors.text, fontVariant: ['tabular-nums'] }}>{serverAddress}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Online players (those who joined via QR) */}
+      {isOnline && lobbyPlayers.length > 0 && (
+        <>
+          <Text variant="body" style={{ color: colors.textSecondary, marginTop: Spacing.xs }}>{t('game.onlinePlayers')}</Text>
+          {lobbyPlayers.map(player => (
+            <View key={player.id} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
+              <View style={[styles.playerColorDot, { backgroundColor: PLAYER_COLOR_HEX[player.color] }]} />
+              <View style={{ flex: 1 }}>
+                <Text variant="body" style={{ color: colors.text, fontWeight: '600' }}>{player.name}</Text>
+              </View>
+              <View style={[styles.lanBadge, { backgroundColor: colors.primary }]}>
+                <Text variant="caption" style={{ color: '#fff', fontWeight: '700', fontSize: 10 }}>LAN</Text>
+              </View>
+            </View>
+          ))}
+        </>
+      )}
 
       {hasSavedGame && (
         <Pressable onPress={resumeGame} style={[styles.resumeBtn, { borderColor: colors.primary }]}>
@@ -382,8 +515,8 @@ function SetupScreen() {
 
       <Pressable
         onPress={handleStart}
-        disabled={players.length < 2}
-        style={[styles.startBtn, { backgroundColor: players.length < 2 ? colors.border : colors.primary, marginTop: Spacing.sm }]}
+        disabled={totalPlayers < 2}
+        style={[styles.startBtn, { backgroundColor: totalPlayers < 2 ? colors.border : colors.primary, marginTop: Spacing.sm }]}
       >
         <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('game.startGame')}</Text>
       </Pressable>
@@ -697,9 +830,22 @@ function PlayScreen() {
     }
   }, [st.phase, st.setupSubPhase]);
 
+  // Open the dice panel for each new battle (keyed by seed so multiplayer's
+  // JSON re-serialisation of the same result doesn't re-trigger the panel).
   React.useEffect(() => {
     if (state?.lastBattleResult && !activePlayer.isAI) setShowDice(true);
-  }, [state?.lastBattleResult]);
+  }, [state?.lastBattleResult?.seed]);
+
+  // Auto-dismiss the dice panel when OCCUPY resolves (captureContext cleared).
+  // Without this, the panel stays open in multiplayer because the server
+  // re-sends lastBattleResult as a new object, keeping showDice true.
+  const prevCaptureContext = React.useRef(st.captureContext);
+  React.useEffect(() => {
+    if (prevCaptureContext.current !== null && st.captureContext === null) {
+      setShowDice(false);
+    }
+    prevCaptureContext.current = st.captureContext;
+  }, [st.captureContext]);
 
   // Auto-reset attack selection when the chosen attacker can no longer attack.
   // This fires after every state change while in ATTACK_TO so the player
@@ -1143,7 +1289,7 @@ const styles = StyleSheet.create({
   colorSwatch:     { width: 24, height: 24, borderRadius: 12 },
   aiRow:           { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap', alignItems: 'center' },
   diffBtn:         { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 3 },
-  addBtnSmall:     { borderRadius: BorderRadius.sm, borderWidth: 1, paddingVertical: 4, paddingHorizontal: Spacing.sm, alignItems: 'center' },
+  addBtnSmall:     { flexDirection: 'row', borderRadius: BorderRadius.sm, borderWidth: 1, paddingVertical: 4, paddingHorizontal: Spacing.sm, alignItems: 'center' },
   startBtn:      { borderRadius: BorderRadius.md, paddingVertical: Spacing.md, alignItems: 'center' },
   resumeBtn:     { borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center', borderWidth: 1, marginBottom: Spacing.md },
   center:            { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
@@ -1168,4 +1314,7 @@ const styles = StyleSheet.create({
   modalBody:     { padding: Spacing.lg, gap: Spacing.md },
   modalRow:      { flexDirection: 'row', gap: Spacing.sm },
   modalBtn:      { flex: 1, paddingVertical: Spacing.md, borderRadius: BorderRadius.md, alignItems: 'center' },
+  qrRow:         { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, borderRadius: BorderRadius.lg, borderWidth: 1, marginBottom: Spacing.sm },
+  qrBox:         { padding: Spacing.xs, backgroundColor: '#ffffff', borderRadius: BorderRadius.sm },
+  lanBadge:      { borderRadius: BorderRadius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2 },
 });

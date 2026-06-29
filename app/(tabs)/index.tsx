@@ -111,7 +111,7 @@ export default function HomeScreen() {
             <View style={styles.btnRow}>
               <Ionicons name="wifi-outline" size={18} color={colors.text} />
               <Text variant="body" style={[styles.btnTextSecondary, { color: colors.text }]}>
-                {t('home.newLanGame')}
+                {t('home.findLanGame')}
               </Text>
             </View>
           </Pressable>

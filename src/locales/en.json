@@ -4,6 +4,7 @@
     "welcome": "World domination awaits.",
     "description": "A Risk-inspired strategy game.",
     "newLanGame": "New LAN Game",
+    "findLanGame": "Find LAN Game",
     "viewMaps": "View Maps"
   },
   "components": {
@@ -82,6 +83,9 @@
     "newGame": "New Game",
     "noActiveGame": "No active game",
     "startGame": "Start Game",
+    "makeOnline": "Make Online",
+    "goLocal": "Go Local",
+    "onlinePlayers": "Online players",
     "playerCount": "Players",
     "playerName": "Player {{n}} name",
     "colorLabel": "Color",

@@ -28,7 +28,7 @@ export default function LobbyRoute() {
   return (
     <Screen scrollable padded>
       <Header title={t('lobby.title')} />
-      <LobbyScreen />
+      <LobbyScreen defaultTab="join" />
     </Screen>
   );
 }

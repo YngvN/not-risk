@@ -4,6 +4,7 @@
     "welcome": "Verdensherredømme venter.",
     "description": "Et Risk-inspirert strategispill.",
     "newLanGame": "Nytt LAN-spill",
+    "findLanGame": "Finn LAN-spill",
     "viewMaps": "Se kart"
   },
   "components": {
@@ -82,6 +83,9 @@
     "newGame": "Nytt spill",
     "noActiveGame": "Ingen aktiv spill",
     "startGame": "Start spill",
+    "makeOnline": "Gjør online",
+    "goLocal": "Gå lokalt",
+    "onlinePlayers": "Online spillere",
     "playerCount": "Spillere",
     "playerName": "Spiller {{n}} navn",
     "colorLabel": "Farge",

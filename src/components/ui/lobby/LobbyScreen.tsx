@@ -13,11 +13,16 @@ import type { PlayerColor } from '../../../engine/types';
 
 type Tab = 'host' | 'join';
 
+interface LobbyScreenProps {
+  /** Which tab to open by default. Defaults to 'host'. */
+  defaultTab?: Tab;
+}
+
 /**
  * Top-level lobby screen. Toggles between host view (QR code + player list)
  * and join view (IP entry form). Powered by MultiplayerContext.
  */
-export function LobbyScreen() {
+export function LobbyScreen({ defaultTab = 'host' }: LobbyScreenProps) {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const {
@@ -26,7 +31,7 @@ export function LobbyScreen() {
     connect, disconnect, markReady, startGame, sendDisconnectChoice,
   } = useMultiplayer();
 
-  const [tab, setTab] = useState<Tab>('host');
+  const [tab, setTab] = useState<Tab>(defaultTab);
 
   const handleConnect = (host: string, port: number, name: string, color: PlayerColor) => {
     connect(host, port, name, color);
