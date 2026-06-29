@@ -11,6 +11,7 @@ import { useTheme } from '../../../hooks/useTheme';
 import { useLanguage } from '../../../hooks/useLanguage';
 import { Spacing, BorderRadius, FontSize } from '../../../constants/spacing';
 import { PLAYER_COLOR_HEX } from '../../../context/GameContext';
+import { pickAiName } from '../../../constants/aiNames';
 import type { LobbyPlayer, GameStartConfig } from '../../../services/MultiplayerService';
 import type { ConnectionStatus } from '../../../services/MultiplayerService';
 import type { PlayerColor, GameMode, AIDifficulty } from '../../../engine/types';
@@ -108,7 +109,8 @@ export function HostPanel({
 
   const addAI = () => {
     if (totalPlayers >= 6) return;
-    setAiSlots(prev => [...prev, { name: t('game.aiLabel'), color: nextFreeColor(takenColors), difficulty: 'medium' }]);
+    const usedNames = aiSlots.map(s => s.name);
+    setAiSlots(prev => [...prev, { name: pickAiName(usedNames), color: nextFreeColor(takenColors), difficulty: 'medium' }]);
   };
   const removeAI = (i: number) => setAiSlots(prev => prev.filter((_, j) => j !== i));
   const updateAI = (i: number, patch: Partial<AiSlot>) =>

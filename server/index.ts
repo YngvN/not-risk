@@ -65,7 +65,20 @@ function joinPage(ip: string, port: number): string {
 
 // Use a real HTTP server so browser visits get a helpful page instead of
 // the raw WebSocket 426 "Upgrade Required" error.
-const httpServer = http.createServer((_req, res) => {
+const httpServer = http.createServer((req, res) => {
+  // Discovery endpoint — returns JSON so clients can find servers on the LAN
+  if (req.url === '/discover') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(JSON.stringify({
+      host: lobby.hostName,
+      playerCount: lobby.players.filter(p => p.connected).length,
+      started: gameStarted,
+    }));
+    return;
+  }
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(joinPage(serverIp, PORT));
 });

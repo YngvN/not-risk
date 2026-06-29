@@ -204,7 +204,11 @@
     "copyUrl": "Copy",
     "copied": "Copied!",
     "paste": "Paste",
-    "joinHint": "Scan the QR code on the host's screen, then paste the address below."
+    "joinHint": "Scan the QR code on the host's screen, then paste the address below.",
+    "availableServers": "Available games",
+    "noServersFound": "No games found on your network.\nMake sure the server is running on the same Wi-Fi.",
+    "inProgress": "In progress",
+    "enterManually": "Enter address manually"
   },
   "world": {
     "title": "World",

@@ -1,24 +1,24 @@
-import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { Ionicons } from '@expo/vector-icons';
 import { Input } from '../Input';
 import { Button } from '../Button';
+import { Modal } from '../Modal';
 import { LobbyPlayerList } from './LobbyPlayerList';
 import { Text } from '../Text';
 import { useTheme } from '../../../hooks/useTheme';
 import { useLanguage } from '../../../hooks/useLanguage';
-import { Spacing } from '../../../constants/spacing';
+import { Spacing, BorderRadius } from '../../../constants/spacing';
+import { scanForServers, type DiscoveredServer } from '../../../services/DiscoveryService';
 import type { ConnectionStatus, LobbyPlayer, GameStartConfig } from '../../../services/MultiplayerService';
 import type { PlayerColor } from '../../../engine/types';
 import { PLAYER_COLOR_HEX } from '../../../context/GameContext';
-import { BorderRadius } from '../../../constants/spacing';
 
 const DEFAULT_PORT = '8080';
 
-/** Parses "IP:PORT" or bare "IP" strings copied from the host's QR card. */
 function parseAddress(raw: string): { host: string; port: string } | null {
-  const trimmed = raw.trim();
-  const match = trimmed.match(/^([\d.]+)(?::(\d+))?$/);
+  const match = raw.trim().match(/^([\d.]+)(?::(\d+))?$/);
   if (!match) return null;
   return { host: match[1], port: match[2] ?? DEFAULT_PORT };
 }
@@ -34,25 +34,61 @@ interface Props {
 }
 
 /**
- * Join-side lobby view: address entry form with a paste button that parses
- * "IP:PORT" strings copied from the host's QR card.
+ * Join-side lobby panel.
+ *
+ * Default: scans the local subnet for fRISKy servers and lists them.
+ * Tapping a server shows a name prompt and connects.
+ * "Enter manually" opens a modal for direct IP/port entry.
  */
 export function JoinPanel({ status, players, lobbyConfig, myId, onConnect, onReady, onDisconnect }: Props) {
   const { colors } = useTheme();
   const { t } = useLanguage();
 
-  const [host, setHost] = useState('');
-  const [port, setPort] = useState(DEFAULT_PORT);
-  const [name, setName] = useState('');
-  const [color] = useState<PlayerColor>('blue');
+  // ── Discovery state ───────────────────────────────────────────────────────
+  const [servers, setServers] = useState<DiscoveredServer[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const scanAbort = useRef<AbortController | null>(null);
+
+  // Pending server the user tapped — waits for name before connecting
+  const [pendingServer, setPendingServer] = useState<DiscoveredServer | null>(null);
+  const [pendingName, setPendingName] = useState('');
+
+  // Manual entry modal
+  const [showManual, setShowManual] = useState(false);
+  const [manualHost, setManualHost] = useState('');
+  const [manualPort, setManualPort] = useState(DEFAULT_PORT);
+  const [manualName, setManualName] = useState('');
   const [pasteError, setPasteError] = useState(false);
+
+  const scan = useCallback(() => {
+    scanAbort.current?.abort();
+    const ctrl = new AbortController();
+    scanAbort.current = ctrl;
+
+    setServers([]);
+    setScanning(true);
+
+    scanForServers(Number(manualPort) || 8080, server => {
+      setServers(prev => {
+        if (prev.some(s => s.ip === server.ip)) return prev;
+        return [...prev, server];
+      });
+    }, ctrl.signal).finally(() => {
+      if (!ctrl.signal.aborted) setScanning(false);
+    });
+  }, [manualPort]);
+
+  useEffect(() => {
+    scan();
+    return () => scanAbort.current?.abort();
+  }, []);
 
   const handlePaste = async () => {
     const text = await Clipboard.getStringAsync();
     const parsed = parseAddress(text);
     if (parsed) {
-      setHost(parsed.host);
-      setPort(parsed.port);
+      setManualHost(parsed.host);
+      setManualPort(parsed.port);
       setPasteError(false);
     } else {
       setPasteError(true);
@@ -60,7 +96,7 @@ export function JoinPanel({ status, players, lobbyConfig, myId, onConnect, onRea
     }
   };
 
-  const connecting = status === 'connecting';
+  // ── Connected / waiting room view ─────────────────────────────────────────
   const connected = status === 'connected';
   const myPlayer = players.find(p => p.id === myId);
 
@@ -77,58 +113,45 @@ export function JoinPanel({ status, players, lobbyConfig, myId, onConnect, onRea
       })),
     ];
 
-    const modeLabel: Record<string, Parameters<typeof t>[0]> = {
+    const modeKey: Record<string, Parameters<typeof t>[0]> = {
       classic: 'game.modeClassic', mission: 'game.modeMission', capital: 'game.modeCapital',
     };
 
     return (
       <View style={styles.container}>
-        {/* Game settings — read-only mirror of what the host has set */}
         {lobbyConfig && (
           <View style={[styles.configCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text variant="label" style={{ color: colors.textSecondary }}>{t('game.modeLabel')}</Text>
             <Text variant="body" style={{ color: colors.text, fontWeight: '600' }}>
-              {t(modeLabel[lobbyConfig.mode] ?? 'game.modeClassic')}
+              {t(modeKey[lobbyConfig.mode] ?? 'game.modeClassic')}
             </Text>
             {lobbyConfig.setupMode === 'random' && (
-              <Text variant="caption" style={{ color: colors.textSecondary }}>
-                · {t('game.setupModeRandom')}
-              </Text>
+              <Text variant="caption" style={{ color: colors.textSecondary }}>· {t('game.setupModeRandom')}</Text>
             )}
             {lobbyConfig.randomPlacement && (
-              <Text variant="caption" style={{ color: colors.textSecondary }}>
-                · {t('game.setupModeRandomPlacement')}
-              </Text>
+              <Text variant="caption" style={{ color: colors.textSecondary }}>· {t('game.setupModeRandomPlacement')}</Text>
             )}
           </View>
         )}
 
-        {/* Full player list including local + AI slots from host */}
         <Text variant="label" style={{ color: colors.textSecondary }}>
           {t('lobby.players')} ({allPlayers.length}/6)
         </Text>
         {allPlayers.map(player => (
-          <View
-            key={player.id}
-            style={[styles.playerRow, {
-              backgroundColor: colors.surface,
-              borderColor: 'isLocal' in player ? colors.border : colors.primary,
-            }]}
-          >
+          <View key={player.id} style={[styles.playerRow, {
+            backgroundColor: colors.surface,
+            borderColor: 'isLocal' in player || 'isAI' in player ? colors.border : colors.primary,
+          }]}>
             <View style={[styles.swatch, { backgroundColor: PLAYER_COLOR_HEX[player.color] }]} />
             <Text variant="body" style={{ color: colors.text, flex: 1 }}>{player.name}</Text>
             {'isAI' in player && (
               <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                <Text variant="caption" style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
-                  {t('game.aiLabel')}
-                </Text>
+                <Text variant="caption" style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{t('game.aiLabel')}</Text>
               </View>
             )}
             {'isLocal' in player && (
               <View style={[styles.badge, { backgroundColor: colors.textSecondary }]}>
-                <Text variant="caption" style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
-                  {t('lobby.localBadge')}
-                </Text>
+                <Text variant="caption" style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{t('lobby.localBadge')}</Text>
               </View>
             )}
             {!('isAI' in player) && !('isLocal' in player) && (
@@ -140,7 +163,7 @@ export function JoinPanel({ status, players, lobbyConfig, myId, onConnect, onRea
         ))}
 
         {myPlayer && !myPlayer.isReady && (
-          <Button label={t('lobby.markReady')} onPress={onReady} style={styles.btn} />
+          <Button label={t('lobby.markReady')} onPress={onReady} />
         )}
         {myPlayer?.isReady && (
           <Text variant="caption" style={{ color: colors.textSecondary, textAlign: 'center' }}>
@@ -152,81 +175,154 @@ export function JoinPanel({ status, players, lobbyConfig, myId, onConnect, onRea
     );
   }
 
+  // ── Discovery view ────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <Text variant="caption" style={{ color: colors.textSecondary }}>
-        {t('lobby.joinHint')}
-      </Text>
 
-      <View style={styles.addressRow}>
-        <View style={{ flex: 1 }}>
-          <Input
-            label={t('lobby.serverIP')}
-            placeholder="10.0.0.57"
-            value={host}
-            onChangeText={text => {
-              // Accept "IP:PORT" typed or pasted directly into the IP field
-              const parsed = parseAddress(text);
-              if (parsed && text.includes(':')) {
-                setHost(parsed.host);
-                setPort(parsed.port);
-              } else {
-                setHost(text);
-              }
-            }}
-            keyboardType="numbers-and-punctuation"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
-        <Button
-          label={pasteError ? '✕' : t('lobby.paste')}
-          variant="outline"
-          onPress={handlePaste}
-          style={styles.pasteBtn}
-        />
+      {/* Server list */}
+      <View style={styles.listHeader}>
+        <Text variant="label" style={{ color: colors.textSecondary }}>{t('lobby.availableServers')}</Text>
+        <Pressable onPress={scan} disabled={scanning} style={styles.refreshBtn}>
+          {scanning
+            ? <ActivityIndicator size="small" color={colors.primary} />
+            : <Ionicons name="refresh-outline" size={18} color={colors.primary} />}
+        </Pressable>
       </View>
 
-      <Input
-        label={t('lobby.port')}
-        placeholder={DEFAULT_PORT}
-        value={port}
-        onChangeText={setPort}
-        keyboardType="number-pad"
-      />
-      <Input
-        label={t('lobby.yourName')}
-        placeholder={t('lobby.namePlaceholder')}
-        value={name}
-        onChangeText={setName}
-        maxLength={20}
-      />
-
-      {status === 'error' && (
-        <Text variant="caption" style={{ color: colors.error }}>
-          {t('lobby.connectionFailed')}
-        </Text>
+      {servers.length === 0 && !scanning && (
+        <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Ionicons name="wifi-outline" size={32} color={colors.textSecondary} />
+          <Text variant="caption" style={{ color: colors.textSecondary, textAlign: 'center' }}>
+            {t('lobby.noServersFound')}
+          </Text>
+        </View>
       )}
 
+      {servers.map(server => (
+        <Pressable
+          key={server.ip}
+          onPress={() => { setPendingServer(server); setPendingName(''); }}
+          style={[styles.serverCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <View style={styles.serverInfo}>
+            <Text variant="body" style={{ color: colors.text, fontWeight: '600' }}>
+              {server.host}
+            </Text>
+            <Text variant="caption" style={{ color: colors.textSecondary }}>
+              {server.ip}:{server.port}
+            </Text>
+          </View>
+          <View style={styles.serverMeta}>
+            <Text variant="caption" style={{ color: colors.textSecondary }}>
+              {server.playerCount}/6
+            </Text>
+            {server.started && (
+              <View style={[styles.badge, { backgroundColor: colors.error }]}>
+                <Text variant="caption" style={{ color: '#fff', fontSize: 10 }}>{t('lobby.inProgress')}</Text>
+              </View>
+            )}
+          </View>
+          <Ionicons name="chevron-forward-outline" size={16} color={colors.textSecondary} />
+        </Pressable>
+      ))}
+
+      {/* Name prompt after tapping a server */}
+      <Modal
+        visible={pendingServer !== null}
+        onClose={() => setPendingServer(null)}
+        title={pendingServer ? `${pendingServer.host}` : ''}
+      >
+        <View style={styles.modalBody}>
+          <Text variant="caption" style={{ color: colors.textSecondary }}>
+            {pendingServer?.ip}:{pendingServer?.port}
+          </Text>
+          <Input
+            label={t('lobby.yourName')}
+            placeholder={t('lobby.namePlaceholder')}
+            value={pendingName}
+            onChangeText={setPendingName}
+            maxLength={20}
+            autoFocus
+          />
+          {status === 'error' && (
+            <Text variant="caption" style={{ color: colors.error }}>{t('lobby.connectionFailed')}</Text>
+          )}
+          <Button
+            label={t('lobby.connect')}
+            loading={status === 'connecting'}
+            disabled={status === 'connecting' || !pendingName.trim()}
+            onPress={() => {
+              if (!pendingServer) return;
+              onConnect(pendingServer.ip, pendingServer.port, pendingName.trim(), 'blue');
+            }}
+          />
+        </View>
+      </Modal>
+
+      {/* Manual entry button */}
       <Button
-        label={t('lobby.connect')}
-        onPress={() => onConnect(host.trim(), Number(port) || 8080, name.trim() || t('lobby.defaultName'), color)}
-        loading={connecting}
-        disabled={connecting || !host.trim()}
-        style={styles.btn}
+        label={t('lobby.enterManually')}
+        variant="ghost"
+        onPress={() => setShowManual(true)}
       />
+
+      {/* Manual entry modal */}
+      <Modal visible={showManual} onClose={() => setShowManual(false)} title={t('lobby.enterManually')}>
+        <View style={styles.modalBody}>
+          <View style={styles.addressRow}>
+            <View style={{ flex: 1 }}>
+              <Input
+                label={t('lobby.serverIP')}
+                placeholder="10.0.0.57"
+                value={manualHost}
+                onChangeText={text => {
+                  const parsed = parseAddress(text);
+                  if (parsed && text.includes(':')) { setManualHost(parsed.host); setManualPort(parsed.port); }
+                  else setManualHost(text);
+                }}
+                keyboardType="numbers-and-punctuation"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+            <Button label={pasteError ? '✕' : t('lobby.paste')} variant="outline" onPress={handlePaste} style={styles.pasteBtn} />
+          </View>
+          <Input label={t('lobby.port')} placeholder={DEFAULT_PORT} value={manualPort} onChangeText={setManualPort} keyboardType="number-pad" />
+          <Input label={t('lobby.yourName')} placeholder={t('lobby.namePlaceholder')} value={manualName} onChangeText={setManualName} maxLength={20} />
+          {status === 'error' && (
+            <Text variant="caption" style={{ color: colors.error }}>{t('lobby.connectionFailed')}</Text>
+          )}
+          <Button
+            label={t('lobby.connect')}
+            loading={status === 'connecting'}
+            disabled={status === 'connecting' || !manualHost.trim()}
+            onPress={() => {
+              onConnect(manualHost.trim(), Number(manualPort) || 8080, manualName.trim() || t('lobby.defaultName'), 'blue');
+              setShowManual(false);
+            }}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container:  { gap: Spacing.md },
-  addressRow: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm },
-  pasteBtn:   { marginBottom: 1 },
-  btn:        { marginTop: Spacing.xs },
-  configCard: { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, gap: 4 },
-  playerRow:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-                padding: Spacing.sm, borderRadius: BorderRadius.md, borderWidth: 1 },
-  swatch:     { width: 16, height: 16, borderRadius: 8 },
-  badge:      { borderRadius: BorderRadius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2 },
+  container:   { gap: Spacing.md },
+  listHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  refreshBtn:  { padding: 4 },
+  emptyCard:   { alignItems: 'center', gap: Spacing.sm, padding: Spacing.xl,
+                 borderRadius: BorderRadius.lg, borderWidth: 1 },
+  serverCard:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+                 padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1 },
+  serverInfo:  { flex: 1, gap: 2 },
+  serverMeta:  { alignItems: 'flex-end', gap: 4 },
+  configCard:  { padding: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, gap: 4 },
+  playerRow:   { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+                 padding: Spacing.sm, borderRadius: BorderRadius.md, borderWidth: 1 },
+  swatch:      { width: 16, height: 16, borderRadius: 8 },
+  badge:       { borderRadius: BorderRadius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2 },
+  modalBody:   { gap: Spacing.md },
+  addressRow:  { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm },
+  pasteBtn:    { marginBottom: 1 },
 });

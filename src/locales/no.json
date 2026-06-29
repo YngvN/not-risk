@@ -204,7 +204,11 @@
     "copyUrl": "Kopier",
     "copied": "Kopiert!",
     "paste": "Lim inn",
-    "joinHint": "Skann QR-koden på vertens skjerm, og lim inn adressen nedenfor."
+    "joinHint": "Skann QR-koden på vertens skjerm, og lim inn adressen nedenfor.",
+    "availableServers": "Tilgjengelige spill",
+    "noServersFound": "Ingen spill funnet på nettverket ditt.\nKontroller at serveren kjører på samme Wi-Fi.",
+    "inProgress": "Pågår",
+    "enterManually": "Skriv inn adresse manuelt"
   },
   "world": {
     "title": "Verden",

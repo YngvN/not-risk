@@ -37,6 +37,12 @@ export class LobbyManager {
   }
 
   get config(): GameStartConfig | null { return this._config; }
+  get hostName(): string {
+    for (const { player } of this.slots.values()) {
+      if (player.isAdmin) return player.name;
+    }
+    return 'Unknown';
+  }
 
   /** Stores the host's current game config and broadcasts it to all players. */
   setConfig(config: GameStartConfig): void {
