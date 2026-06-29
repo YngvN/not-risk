@@ -331,11 +331,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    // Center content so the scale transform (anchored at the container centre)
-    // is also anchored at the content centre. Without this, zooming pushes the
-    // top of a short SVG off-screen on phones.
+    // justifyContent:center vertically centres the SVG so the scale transform
+    // (anchored at the container centre) is also anchored at the content centre.
+    // alignItems must stay at the default 'stretch' so the SVG fills full width.
     justifyContent: 'center',
-    alignItems: 'center',
   },
   zoomButtons: {
     position: 'absolute',

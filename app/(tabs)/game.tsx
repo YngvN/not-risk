@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { View, Pressable, StyleSheet, TextInput, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { MotiView, AnimatePresence } from 'moti';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { Screen } from '../../src/components/layout/Screen';
@@ -25,11 +26,11 @@ import { TERRITORIES, type Territory } from '../../src/constants/riskWorldTerrit
 import { areAdjacent, getConnectedOwned, getAdjacentIds } from '../../src/engine/board';
 import type { PlayerConfig, SetupMode } from '../../src/engine/setup';
 import { pickAiName } from '../../src/constants/aiNames';
+import { pickConquerorName } from '../../src/constants/conquerorNames';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
 const ALL_COLORS: PlayerColor[] = ['red', 'blue', 'green', 'yellow', 'black', 'pink'];
-const DEFAULT_NAMES = ['Alice', 'Bob', 'Carol', 'Dave', 'Eve', 'Frank'];
 
 function Checkbox({ checked, onToggle, label }: { checked: boolean; onToggle: () => void; label: string }) {
   const { colors } = useTheme();
@@ -146,10 +147,16 @@ function SetupScreen() {
   const { colors } = useTheme();
   const { t } = useLanguage();
 
-  const [players, setPlayers] = useState<PlayerEntry[]>([
-    { name: DEFAULT_NAMES[0], color: 'red',  isAI: false, difficulty: 'medium' },
-    { name: DEFAULT_NAMES[1], color: 'blue', isAI: false, difficulty: 'medium' },
-  ]);
+  const [players, setPlayers] = useState<PlayerEntry[]>(() => {
+    const n1 = pickConquerorName([]);
+    const n2 = pickConquerorName([n1]);
+    return [
+      { name: n1, color: 'red',  isAI: false, difficulty: 'medium' },
+      { name: n2, color: 'blue', isAI: false, difficulty: 'medium' },
+    ];
+  });
+  // Index of the player card currently showing the name text input (null = all read-only)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [lastAIDifficulty, setLastAIDifficulty] = useState<AIDifficulty>('medium');
   const [gameMode, setGameMode] = useState<GameMode>('classic');
   const [randomDeal, setRandomDeal] = useState(false);
@@ -167,13 +174,10 @@ function SetupScreen() {
 
   const addHuman = () => {
     if (players.length >= 6) return;
-    const idx = players.length;
-    setPlayers(prev => [...prev, {
-      name: DEFAULT_NAMES[idx] ?? `Player ${idx + 1}`,
-      color: nextFreeColor(),
-      isAI: false,
-      difficulty: 'medium',
-    }]);
+    setPlayers(prev => {
+      const usedNames = prev.filter(p => !p.isAI).map(p => p.name);
+      return [...prev, { name: pickConquerorName(usedNames), color: nextFreeColor(), isAI: false, difficulty: 'medium' }];
+    });
   };
 
   const addAI = () => {
@@ -265,13 +269,30 @@ function SetupScreen() {
           <View style={[styles.playerColorDot, { backgroundColor: PLAYER_COLOR_HEX[player.color] }]} />
           <View style={{ flex: 1, gap: Spacing.xs }}>
             <View style={styles.playerCardHeader}>
-              <TextInput
-                value={player.name}
-                onChangeText={text => updatePlayer(i, { name: text })}
-                style={[styles.nameInput, { color: colors.text, borderColor: colors.border, flex: 1 }]}
-                placeholder={player.isAI ? t('game.aiLabel') : `Player ${i + 1}`}
-                placeholderTextColor={colors.textSecondary}
-              />
+              {!player.isAI && editingIndex === i ? (
+                <TextInput
+                  autoFocus
+                  value={player.name}
+                  onChangeText={text => updatePlayer(i, { name: text })}
+                  onBlur={() => setEditingIndex(null)}
+                  onSubmitEditing={() => setEditingIndex(null)}
+                  style={[styles.nameInput, { color: colors.text, borderColor: colors.border, flex: 1 }]}
+                  placeholderTextColor={colors.textSecondary}
+                />
+              ) : (
+                <Text
+                  variant="body"
+                  style={{ color: colors.text, flex: 1, fontWeight: '600' }}
+                  numberOfLines={1}
+                >
+                  {player.name}
+                </Text>
+              )}
+              {!player.isAI && editingIndex !== i && (
+                <Pressable onPress={() => setEditingIndex(i)} hitSlop={6}>
+                  <Ionicons name="pencil-outline" size={15} color={colors.textSecondary} />
+                </Pressable>
+              )}
               {players.length > 1 && (
                 <Pressable onPress={() => removePlayer(i)} style={[styles.removeBtn, { borderColor: colors.border }]}>
                   <Text variant="caption" style={{ color: colors.textSecondary, lineHeight: 16 }}>✕</Text>
