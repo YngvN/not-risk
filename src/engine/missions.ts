@@ -1,6 +1,6 @@
 import type { MissionCard, MissionType, PlayerColor, Player, PlayerId, GameState } from './types';
 import type { ContinentId } from '../constants/riskWorldTerritories';
-import { getOwnedContinents, getTerritoryCount } from './board';
+import { getOwnedContinents, getTerritoryCount, getContinentTerritories } from './board';
 
 // ── The 12 mission cards ──────────────────────────────────────────────────────
 
@@ -107,11 +107,26 @@ export function checkMission(
   }
 }
 
+// ── Progress helpers ──────────────────────────────────────────────────────────
+
+/** 0–1 fraction of a continent's territories owned by the player. */
+function continentFraction(state: GameState, playerId: PlayerId, continent: ContinentId): number {
+  const ids = getContinentTerritories(continent);
+  if (ids.length === 0) return 0;
+  const owned = ids.filter(id => state.territories[id]?.owner === playerId).length;
+  return owned / ids.length;
+}
+
+const ALL_CONTINENTS: ContinentId[] = ['na', 'sa', 'eu', 'af', 'as', 'au'];
+
 // ── Progress (0–1) ───────────────────────────────────────────────────────────
 
 /**
  * Returns a 0–1 float representing how close a player is to completing
  * their secret mission. Used for the testing inspector overlay.
+ *
+ * Continent missions use territory-level granularity so partial ownership
+ * (e.g. 8/9 territories in North America) shows meaningful progress.
  */
 export function missionProgress(
   playerId: PlayerId,
@@ -123,17 +138,20 @@ export function missionProgress(
 
   switch (mission.type) {
     case 'TWO_CONTINENTS': {
-      const owned = getOwnedContinents(state.territories, playerId);
       const [c1, c2] = mission.continents!;
-      return [c1, c2].filter(c => owned.includes(c)).length / 2;
+      const p1 = continentFraction(state, playerId, c1);
+      const p2 = continentFraction(state, playerId, c2);
+      return (p1 + p2) / 2;
     }
 
     case 'TWO_CONTINENTS_PLUS_ONE': {
-      const owned = getOwnedContinents(state.territories, playerId);
       const [c1, c2] = mission.continents!;
-      const required = [c1, c2].filter(c => owned.includes(c)).length;
-      const extra = owned.length >= 3 ? 1 : 0;
-      return (required + extra) / 3;
+      const p1 = continentFraction(state, playerId, c1);
+      const p2 = continentFraction(state, playerId, c2);
+      // Best third continent (any other than c1/c2)
+      const others = ALL_CONTINENTS.filter(c => c !== c1 && c !== c2);
+      const p3 = Math.max(...others.map(c => continentFraction(state, playerId, c)));
+      return (p1 + p2 + p3) / 3;
     }
 
     case 'HOLD_24':

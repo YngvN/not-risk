@@ -47,7 +47,10 @@ export function FloatingTabBar() {
   const { t }      = useLanguage();
   const { state, resetGame } = useGame();
 
+  const isHome = pathname === '/' || pathname === '';
   const hasGame = state !== null;
+
+  if (isHome) return null;
 
   const fabBottom   = insets.bottom + MARGIN;
   const panelBottom = fabBottom + FAB_SIZE + MARGIN;

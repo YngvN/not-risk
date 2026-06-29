@@ -116,10 +116,14 @@ function Handle({ svgId, svgX, svgY, naturalScale, zoomScale, containerHeight, c
     transform: [{ translateX: tx.value }, { translateY: ty.value }],
   }));
 
-  // When the SVG is shorter than the ZoomableMap container, justifyContent:center
-  // offsets the SVG down by (containerHeight - contentHeight) / 2 within the
-  // Animated.View. Handles must include this offset so they align with the labels.
-  const verticalOffset = Math.max(0, (containerHeight.value - contentHeight.value) / 2);
+  // justifyContent:center positions the SVG at (ch - svgH) / 2 within the
+  // Animated.View — positive when the container is taller (SVG floats down),
+  // negative when the SVG is taller (SVG overflows upward from the centre).
+  // Both cases must be accounted for; clamping to 0 would shift handles down
+  // when svgH > ch (the common case on wide desktop screens).
+  const ch = containerHeight.value;
+  const cH = contentHeight.value;
+  const verticalOffset = (ch > 0 && cH > 0) ? (ch - cH) / 2 : 0;
 
   // Natural-zoom screen position of the handle centre (within the absoluteFill overlay)
   const screenX = (svgX - VB_X) * naturalScale;

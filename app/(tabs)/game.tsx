@@ -25,8 +25,12 @@ import { missionDescription } from '../../src/engine/missions';
 import { TERRITORIES, type Territory } from '../../src/constants/riskWorldTerritories';
 import { areAdjacent, getConnectedOwned, getAdjacentIds } from '../../src/engine/board';
 import type { PlayerConfig, SetupMode } from '../../src/engine/setup';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { pickAiName } from '../../src/constants/aiNames';
 import { pickConquerorName } from '../../src/constants/conquerorNames';
+import { useLabelPositions } from '../../src/hooks/useLabelPositions';
+
+const SETUP_KEY = '@last_game_setup';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -162,6 +166,35 @@ function SetupScreen() {
   const [randomDeal, setRandomDeal] = useState(false);
   const [randomPlacement, setRandomPlacement] = useState(false);
   const [rules, setRules] = useState<GameRules>(DEFAULT_RULES);
+  // Guard: prevents the auto-save from overwriting restored data on first render
+  const [setupLoaded, setSetupLoaded] = useState(false);
+
+  // Restore last setup on first mount
+  React.useEffect(() => {
+    AsyncStorage.getItem(SETUP_KEY).then(raw => {
+      if (raw) {
+        try {
+          const saved = JSON.parse(raw);
+          if (saved.players) setPlayers(saved.players);
+          if (saved.gameMode) setGameMode(saved.gameMode);
+          if (typeof saved.randomDeal === 'boolean') setRandomDeal(saved.randomDeal);
+          if (typeof saved.randomPlacement === 'boolean') setRandomPlacement(saved.randomPlacement);
+          if (saved.rules) setRules(saved.rules);
+          const lastAI = (saved.players as PlayerEntry[] | undefined)?.find(p => p.isAI)?.difficulty;
+          if (lastAI) setLastAIDifficulty(lastAI);
+        } catch {
+          // corrupt storage — keep defaults
+        }
+      }
+      setSetupLoaded(true);
+    });
+  }, []);
+
+  // Auto-save whenever setup changes (skipped until the restore above completes)
+  React.useEffect(() => {
+    if (!setupLoaded) return;
+    AsyncStorage.setItem(SETUP_KEY, JSON.stringify({ players, gameMode, randomDeal, randomPlacement, rules }));
+  }, [setupLoaded, players, gameMode, randomDeal, randomPlacement, rules]);
 
   const toggleRule = <K extends keyof GameRules>(key: K, value: GameRules[K]) =>
     setRules(r => ({ ...r, [key]: value }));
@@ -259,9 +292,27 @@ function SetupScreen() {
       </View>
 
       {/* Per-player config */}
-      <Text variant="body" style={{ color: colors.textSecondary, marginBottom: Spacing.xs }}>
-        {t('game.playerCount')}  {players.length}/6
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xs, gap: Spacing.sm }}>
+        <Text variant="body" style={{ color: colors.textSecondary, flex: 1 }}>
+          {t('game.playerCount')}  {players.length}/6
+        </Text>
+        {players.length < 6 && (
+          <>
+            <Pressable
+              onPress={addHuman}
+              style={[styles.addBtnSmall, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Text variant="caption" style={{ color: colors.text, fontWeight: '600' }}>+ {t('game.humanLabel')}</Text>
+            </Pressable>
+            <Pressable
+              onPress={addAI}
+              style={[styles.addBtnSmall, { backgroundColor: colors.surface, borderColor: colors.primary }]}
+            >
+              <Text variant="caption" style={{ color: colors.primary, fontWeight: '600' }}>+ {t('game.aiLabel')}</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
 
       <View style={styles.playersGrid}>
       {players.map((player, i) => (
@@ -329,24 +380,6 @@ function SetupScreen() {
       ))}
       </View>
 
-      {/* Add player buttons */}
-      {players.length < 6 && (
-        <View style={[styles.addRow, { marginBottom: Spacing.sm }]}>
-          <Pressable
-            onPress={addHuman}
-            style={[styles.addBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          >
-            <Text variant="body" style={{ color: colors.text, fontWeight: '600' }}>+ {t('game.humanLabel')}</Text>
-          </Pressable>
-          <Pressable
-            onPress={addAI}
-            style={[styles.addBtn, { backgroundColor: colors.surface, borderColor: colors.primary }]}
-          >
-            <Text variant="body" style={{ color: colors.primary, fontWeight: '600' }}>+ {t('game.aiLabel')}</Text>
-          </Pressable>
-        </View>
-      )}
-
       <Pressable
         onPress={handleStart}
         disabled={players.length < 2}
@@ -364,6 +397,7 @@ function HQSelectionScreen() {
   const { state, dispatch } = useGame();
   const { colors } = useTheme();
   const { t } = useLanguage();
+  const { positions: labelPositions } = useLabelPositions();
   const [deviceUnlocked, setDeviceUnlocked] = useState(false);
   const [candidate, setCandidate] = useState<TerritoryId | null>(null);
 
@@ -425,7 +459,7 @@ function HQSelectionScreen() {
       </View>
 
       <ZoomableMap>
-        <RiskBoardMap showRiskLayer territoryFills={territoryFills} armyCounts={armyCounts} highlightedIds={highlightedIds} selectableIds={selectableIds} onTerritorySelect={terr => { if (terr && st.territories[terr.id as TerritoryId]?.owner === activePlayer.id) setCandidate(terr.id as TerritoryId); }} />
+        <RiskBoardMap showRiskLayer territoryFills={territoryFills} armyCounts={armyCounts} highlightedIds={highlightedIds} selectableIds={selectableIds} labelOverrides={labelPositions} onTerritorySelect={terr => { if (terr && st.territories[terr.id as TerritoryId]?.owner === activePlayer.id) setCandidate(terr.id as TerritoryId); }} />
       </ZoomableMap>
 
       <View style={[styles.hqPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -544,6 +578,7 @@ function PlayScreen() {
   const { colors } = useTheme();
   const { t } = useLanguage();
   const { showAllMissions } = useTesting();
+  const { positions: labelPositions } = useLabelPositions();
   const { width } = useWindowDimensions();
   const isWide = width >= WIDE_BREAKPOINT;
 
@@ -954,6 +989,7 @@ function PlayScreen() {
             restoreSelectionId={selection.phase === 'ATTACK_TO' ? selection.from : undefined}
             forceLiftedIds={forceLiftedIds}
             pulsingIds={pulsingIds}
+            labelOverrides={labelPositions}
           />
         </ZoomableMap>
 
@@ -1107,8 +1143,7 @@ const styles = StyleSheet.create({
   colorSwatch:     { width: 24, height: 24, borderRadius: 12 },
   aiRow:           { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap', alignItems: 'center' },
   diffBtn:         { borderRadius: BorderRadius.full, borderWidth: 1, paddingHorizontal: Spacing.sm, paddingVertical: 3 },
-  addRow:          { flexDirection: 'row', gap: Spacing.sm },
-  addBtn:          { flex: 1, borderRadius: BorderRadius.md, borderWidth: 1, paddingVertical: Spacing.sm, alignItems: 'center' },
+  addBtnSmall:     { borderRadius: BorderRadius.sm, borderWidth: 1, paddingVertical: 4, paddingHorizontal: Spacing.sm, alignItems: 'center' },
   startBtn:      { borderRadius: BorderRadius.md, paddingVertical: Spacing.md, alignItems: 'center' },
   resumeBtn:     { borderRadius: BorderRadius.md, paddingVertical: Spacing.sm, alignItems: 'center', borderWidth: 1, marginBottom: Spacing.md },
   center:            { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md },
