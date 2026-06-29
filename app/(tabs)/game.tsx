@@ -539,6 +539,8 @@ function PlayScreen() {
   const zoomMapRef = useRef<ZoomableMapRef>(null);
   // Tracks which territories were involved in the most recent attack dispatch
   const lastAttackRef = useRef<{ from: TerritoryId; to: TerritoryId } | null>(null);
+  // Tracks whether we've already saved the pre-selection zoom for this selection session
+  const zoomSavedRef = useRef(false);
 
   const st = state!;
   const activePlayerId = st.activePlayerId;
@@ -587,19 +589,33 @@ function PlayScreen() {
     zoomMapRef.current?.zoomToPoint(px, py, targetScale);
   }, [isWide, width]);
 
-  // Zoom in when attacker territory selected; reset otherwise
+  // Zoom in when attacker territory selected; restore saved zoom on deselect
   React.useEffect(() => {
     if (selection.phase === 'ATTACK_FROM') {
+      // Save the user's current zoom level only on the first territory selection
+      // of this attack sequence, so deselecting goes back to exactly that level.
+      if (!zoomSavedRef.current) {
+        zoomMapRef.current?.saveTransform();
+        zoomSavedRef.current = true;
+      }
       zoomToTerritory(selection.from);
-    } else if (selection.phase === 'none' || selection.phase === 'FORTIFY_FROM' || selection.phase === 'FORTIFY_TO') {
+    } else if (selection.phase === 'none') {
+      // Restore the zoom the player had before they selected a territory
+      zoomSavedRef.current = false;
+      zoomMapRef.current?.restoreTransform();
+    } else if (selection.phase === 'FORTIFY_FROM' || selection.phase === 'FORTIFY_TO') {
+      zoomSavedRef.current = false;
       zoomMapRef.current?.resetZoom();
     }
     // Keep zoom when moving to ATTACK_TO (target selection)
   }, [selection.phase, (selection as { from?: TerritoryId }).from]);
 
-  // Reset zoom when leaving attack phase
+  // Reset zoom when leaving attack phase entirely
   React.useEffect(() => {
-    if (st.phase !== 'ATTACK') zoomMapRef.current?.resetZoom();
+    if (st.phase !== 'ATTACK') {
+      zoomSavedRef.current = false;
+      zoomMapRef.current?.resetZoom();
+    }
   }, [st.phase]);
 
   // Clear the claimed-territory highlight when leaving the CLAIMING sub-phase

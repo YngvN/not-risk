@@ -25,6 +25,10 @@ export interface ZoomableMapRef {
    * immediately centers the content vertically if it overflows.
    */
   setContentHeight(h: number): void;
+  /** Snapshots the current scale/position so restoreTransform can return to it. */
+  saveTransform(): void;
+  /** Springs back to the last saved transform (e.g. user's manual zoom before territory selection). */
+  restoreTransform(): void;
   /** Returns the live transform and size shared values for external overlays. */
   getTransform(): {
     scale: SharedValue<number>;
@@ -70,6 +74,10 @@ function ZoomableMap({ children }, ref) {
   const savedTy = useSharedValue(0);
   const cw = useSharedValue(0);
   const ch = useSharedValue(0);
+  // Snapshot for saveTransform / restoreTransform
+  const snapScale = useSharedValue(1);
+  const snapTx    = useSharedValue(0);
+  const snapTy    = useSharedValue(0);
   // Natural (unscaled) content dimensions — may differ from container when
   // the SVG's aspect ratio makes it taller than the visible area.
   const contentW = useSharedValue(0);
@@ -252,6 +260,22 @@ function ZoomableMap({ children }, ref) {
       // visually centred at ty=0 — no translation needed.
       ty.value = 0;
       savedTy.value = 0;
+    },
+    saveTransform() {
+      snapScale.value = scale.value;
+      snapTx.value    = tx.value;
+      snapTy.value    = ty.value;
+    },
+    restoreTransform() {
+      const s = snapScale.value;
+      const ntx = clampTx(snapTx.value, s);
+      const nty = clampTy(snapTy.value, s);
+      scale.value = withSpring(s, SPRING);
+      savedScale.value = s;
+      tx.value = withSpring(ntx, SPRING);
+      ty.value = withSpring(nty, SPRING);
+      savedTx.value = ntx;
+      savedTy.value = nty;
     },
     getTransform() {
       return { scale, tx, ty, containerHeight: ch, contentHeight: contentH };

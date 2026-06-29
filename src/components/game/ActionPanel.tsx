@@ -92,7 +92,11 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   const name = activePlayer.name;
 
   React.useEffect(() => {
-    if (state.captureContext) setOccupyArmies(state.captureContext.minArmies);
+    if (state.captureContext) {
+      const { minArmies, maxArmies } = state.captureContext;
+      // Default to the midpoint so the player starts at roughly 50/50 split.
+      setOccupyArmies(Math.round((minArmies + maxArmies) / 2));
+    }
   }, [state.captureContext?.from, state.captureContext?.to]);
 
   React.useEffect(() => {
@@ -244,23 +248,15 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
       const maxDice = Math.min(3, state.territories[from].armies - 1);
       return (
         <Panel playerColor={playerColor} playerName={name}>
-          <Text variant="body" style={{ color: colors.text, fontWeight: '700' }}>
-            {t('game.phaseAttack')}
-          </Text>
-          <View style={styles.row}>
-            {[1, 2, 3].filter(n => n <= maxDice).map(n => (
-              <Btn
-                key={n}
-                label={t('game.attackWith').replace('{{n}}', String(n))}
-                onPress={() => {
-                  dispatch({ type: 'ATTACK', from, to, attackerDice: n });
-                  // Keep ATTACK_TO selection — PlayScreen resets it when the
-                  // attacker runs out of armies or the player taps Cancel.
-                }}
-              />
-            ))}
-          </View>
-          <Btn label={t('common.cancel')} variant="secondary" onPress={() => onSelectionChange({ phase: 'none' })} />
+          {/* key resets local dice state when the selected territories change */}
+          <AttackDicePanel
+            key={`${from}-${to}`}
+            from={from}
+            to={to}
+            maxDice={maxDice}
+            dispatch={dispatch}
+            onCancel={() => onSelectionChange({ phase: 'none' })}
+          />
         </Panel>
       );
     }
@@ -323,6 +319,49 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
   }
 
   return null;
+}
+
+// ── Attack dice slider ────────────────────────────────────────────────────────
+
+interface AttackDicePanelProps {
+  from: TerritoryId;
+  to: TerritoryId;
+  maxDice: number;
+  dispatch: (action: GameAction) => void;
+  onCancel: () => void;
+}
+
+/** Separate component so its local state resets when the territory selection changes. */
+function AttackDicePanel({ from, to, maxDice, dispatch, onCancel }: AttackDicePanelProps) {
+  const { colors } = useTheme();
+  const { t } = useLanguage();
+  const [dice, setDice] = useState(maxDice);
+  const clamped = Math.min(dice, maxDice);
+
+  return (
+    <>
+      <Text variant="body" style={{ color: colors.text, fontWeight: '700' }}>
+        {t('game.phaseAttack')}
+      </Text>
+      {maxDice > 1 ? (
+        <>
+          <Text variant="caption" style={{ color: colors.textSecondary, textAlign: 'center' }}>
+            {t('game.attackWith').replace('{{n}}', String(clamped))}
+          </Text>
+          <Slider value={clamped} min={1} max={maxDice} step={1} onChange={setDice} />
+        </>
+      ) : (
+        <Text variant="caption" style={{ color: colors.textSecondary }}>
+          {t('game.attackWith').replace('{{n}}', '1')}
+        </Text>
+      )}
+      <Btn
+        label={t('game.attackWith').replace('{{n}}', String(clamped))}
+        onPress={() => dispatch({ type: 'ATTACK', from, to, attackerDice: clamped })}
+      />
+      <Btn label={t('common.cancel')} variant="secondary" onPress={onCancel} />
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
