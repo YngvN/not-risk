@@ -3,7 +3,8 @@
     "title": "fRISKy",
     "welcome": "Verdensherredømme venter.",
     "description": "Et Risk-inspirert strategispill.",
-    "newLanGame": "Nytt LAN-spill"
+    "newLanGame": "Nytt LAN-spill",
+    "viewMaps": "Se kart"
   },
   "components": {
     "title": "Komponenter",
@@ -22,7 +23,19 @@
     "themeLight": "Lys",
     "themeDark": "Mørk",
     "language": "Språk",
-    "languageSelect": "Velg språk"
+    "languageSelect": "Velg språk",
+    "testing": "Testing",
+    "showAllMissions": "Vis alle hemmelige oppdrag",
+    "showAllMissionsHint": "Viser hvert oppdrag og fremdrift i % på kartet (kun i Hemmelig oppdrag-modus).",
+    "viewComponents": "Vis UI-komponenter",
+    "allowMapEditing": "Tillat kartredigering",
+    "allowMapEditingHint": "Viser verktøy for plassering og tilkoblinger i Se kart.",
+    "restoreLabelPositions": "Gjenopprett originale etikett-posisjoner",
+    "editLabelPlacement": "Rediger etikett-plassering",
+    "editConnections": "Rediger tilkoblinger",
+    "savePositions": "Lagre",
+    "resetPositions": "Tilbakestill til standard",
+    "cancelEditing": "Avbryt"
   },
   "modal": {
     "open": "Åpne modal",
@@ -53,7 +66,7 @@
     "easternUS": "Øst-USA",
     "centralAmerica": "Mellom-Amerika",
     "kamchatkaNote": "→ Kamchatka",
-    "board": "Brett"
+    "board": "Original"
   },
   "southAmerica": {
     "title": "Sør-Amerika",
@@ -167,6 +180,9 @@
     "continentAF": "Afrika",
     "continentAS": "Asia",
     "continentAU": "Australia"
+  },
+  "nav": {
+    "exitGameTitle": "Avslutt spill?"
   },
   "lobby": {
     "title": "LAN flerspiller",

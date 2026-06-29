@@ -1,6 +1,13 @@
 import http from 'http';
+import fs from 'fs';
+import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import os from 'os';
+
+const LABEL_OVERRIDES_PATH = path.join(
+  process.cwd(),
+  'src', 'constants', 'labelPositionsOverrides.json',
+);
 import { LobbyManager } from './LobbyManager';
 import { GameServer } from './GameServer';
 import type { ClientMsg, ServerMsg } from './types';
@@ -66,6 +73,31 @@ function joinPage(ip: string, port: number): string {
 // Use a real HTTP server so browser visits get a helpful page instead of
 // the raw WebSocket 426 "Upgrade Required" error.
 const httpServer = http.createServer((req, res) => {
+  // CORS preflight
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  // Label-position editor: save overrides to project file so Metro hot-reloads
+  if (req.method === 'POST' && req.url === '/save-labels') {
+    let body = '';
+    req.on('data', chunk => { body += String(chunk); });
+    req.on('end', () => {
+      try {
+        const positions = JSON.parse(body);
+        fs.writeFileSync(LABEL_OVERRIDES_PATH, JSON.stringify(positions, null, 2) + '\n');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+        console.log(`[fRISKy server] Saved ${Object.keys(positions).length} label override(s).`);
+      } catch {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      }
+    });
+    return;
+  }
+
   // Discovery endpoint — returns JSON so clients can find servers on the LAN
   if (req.url === '/discover') {
     res.writeHead(200, {

@@ -8,3 +8,4 @@ export { ReinforcementLog, type ReinforcementEntry } from './ReinforcementLog';
 export { EventLog } from './EventLog';
 export { GameSidePanel, GameSlidePanel, PANEL_WIDTH } from './GameSidePanel';
 export { ContinentLegend } from './ContinentLegend';
+export { MissionInspector } from './MissionInspector';

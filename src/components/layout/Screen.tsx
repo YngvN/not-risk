@@ -75,6 +75,8 @@ export function Screen({ children, scrollable = false, padded = true, animated =
             contentContainerStyle={padded ? styles.padded : undefined}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            pinchGestureEnabled={false}
+            maximumZoomScale={1}
           >
             {children}
           </ScrollView>

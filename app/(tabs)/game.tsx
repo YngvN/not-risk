@@ -10,13 +10,15 @@ import {
   DiceModal, ActionPanel, CardHandModal,
   PassDeviceScreen, MissionCard, GameSidePanel, GameSlidePanel,
   ContinentLegend,
+  MissionInspector,
   type SelectionMode,
 } from '../../src/components/game';
 import { useGame, PLAYER_COLOR_HEX } from '../../src/context/GameContext';
+import { useTesting } from '../../src/context/TestingContext';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useLanguage } from '../../src/hooks/useLanguage';
 import { Spacing, BorderRadius } from '../../src/constants/spacing';
-import type { PlayerColor, TerritoryId, GameMode, GameRules, AIDifficulty } from '../../src/engine/types';
+import type { PlayerColor, TerritoryId, GameMode, GameRules, AIDifficulty, GameAction } from '../../src/engine/types';
 import { DEFAULT_RULES } from '../../src/engine/types';
 import { missionDescription } from '../../src/engine/missions';
 import { TERRITORIES, type Territory } from '../../src/constants/riskWorldTerritories';
@@ -184,7 +186,7 @@ function SetupScreen() {
   };
 
   const removePlayer = (i: number) => {
-    if (players.length <= 2) return;
+    if (players.length <= 1) return;
     setPlayers(prev => prev.filter((_, j) => j !== i));
   };
 
@@ -253,6 +255,7 @@ function SetupScreen() {
         {t('game.playerCount')}  {players.length}/6
       </Text>
 
+      <View style={styles.playersGrid}>
       {players.map((player, i) => (
         <View key={i} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: player.isAI ? colors.primary : colors.border }]}>
           <View style={[styles.playerColorDot, { backgroundColor: PLAYER_COLOR_HEX[player.color] }]} />
@@ -265,7 +268,7 @@ function SetupScreen() {
                 placeholder={player.isAI ? t('game.aiLabel') : `Player ${i + 1}`}
                 placeholderTextColor={colors.textSecondary}
               />
-              {players.length > 2 && (
+              {players.length > 1 && (
                 <Pressable onPress={() => removePlayer(i)} style={[styles.removeBtn, { borderColor: colors.border }]}>
                   <Text variant="caption" style={{ color: colors.textSecondary, lineHeight: 16 }}>✕</Text>
                 </Pressable>
@@ -299,6 +302,7 @@ function SetupScreen() {
           </View>
         </View>
       ))}
+      </View>
 
       {/* Add player buttons */}
       {players.length < 6 && (
@@ -318,7 +322,11 @@ function SetupScreen() {
         </View>
       )}
 
-      <Pressable onPress={handleStart} style={[styles.startBtn, { backgroundColor: colors.primary, marginTop: Spacing.sm }]}>
+      <Pressable
+        onPress={handleStart}
+        disabled={players.length < 2}
+        style={[styles.startBtn, { backgroundColor: players.length < 2 ? colors.border : colors.primary, marginTop: Spacing.sm }]}
+      >
         <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('game.startGame')}</Text>
       </Pressable>
     </Screen>
@@ -510,6 +518,7 @@ function PlayScreen() {
   const { state, dispatch } = useGame();
   const { colors } = useTheme();
   const { t } = useLanguage();
+  const { showAllMissions } = useTesting();
   const { width } = useWindowDimensions();
   const isWide = width >= WIDE_BREAKPOINT;
 
@@ -525,12 +534,24 @@ function PlayScreen() {
   const [logHighlightedIds, setLogHighlightedIds] = useState<Set<string>>(new Set());
   const [showReinforceDoneModal, setShowReinforceDoneModal] = useState(false);
   const [lastClaimedId, setLastClaimedId] = useState<TerritoryId | null>(null);
+  const [pulsingIds, setPulsingIds] = useState<ReadonlySet<string>>(new Set());
   const prevActivePlayer = useRef<string | null>(null);
   const zoomMapRef = useRef<ZoomableMapRef>(null);
+  // Tracks which territories were involved in the most recent attack dispatch
+  const lastAttackRef = useRef<{ from: TerritoryId; to: TerritoryId } | null>(null);
 
   const st = state!;
   const activePlayerId = st.activePlayerId;
   const activePlayer = st.players.find(p => p.id === activePlayerId)!;
+
+  // Intercept ATTACK dispatches so we know which territories were involved
+  // when the battle result arrives on the next render.
+  const trackedDispatch = React.useCallback((action: GameAction) => {
+    if (action.type === 'ATTACK') {
+      lastAttackRef.current = { from: action.from, to: action.to };
+    }
+    dispatch(action);
+  }, [dispatch]);
 
   // ── Zoom helpers (attack phase) ───────────────────────────────────────────
 
@@ -590,6 +611,34 @@ function PlayScreen() {
 
   React.useEffect(() => {
     if (state?.lastBattleResult && !activePlayer.isAI) setShowDice(true);
+  }, [state?.lastBattleResult]);
+
+  // Auto-reset attack selection when the chosen attacker can no longer attack.
+  // This fires after every state change while in ATTACK_TO so the player
+  // doesn't get stuck with a territory that has only 1 army left.
+  React.useEffect(() => {
+    if (selection.phase !== 'ATTACK_TO') return;
+    if (st.phase !== 'ATTACK' || st.captureContext) return;
+    const armies = st.territories[selection.from]?.armies ?? 0;
+    if (armies < 2) setSelection({ phase: 'none' });
+  }, [state]);
+
+  // Pulse red on territories that lost units this battle.
+  React.useEffect(() => {
+    const result = state?.lastBattleResult;
+    const attack = lastAttackRef.current;
+    if (!result || !attack) return;
+
+    const toAdd = new Set<string>();
+    if (result.attackerLosses > 0) toAdd.add(attack.from);
+    // Only pulse defender if they lost units but kept the territory
+    if (result.defenderLosses > 0 && !state?.captureContext) toAdd.add(attack.to);
+
+    if (toAdd.size === 0) return;
+    setPulsingIds(toAdd);
+    // Clear after animation completes (120+180+120+380 = ~800ms, give a little extra)
+    const t = setTimeout(() => setPulsingIds(new Set()), 900);
+    return () => clearTimeout(t);
   }, [state?.lastBattleResult]);
 
   // Auto-show confirmation modal when all reinforcements are placed (human players only)
@@ -851,10 +900,12 @@ function PlayScreen() {
             tappableIds={tappableIds}
             restoreSelectionId={selection.phase === 'ATTACK_TO' ? selection.from : undefined}
             forceLiftedIds={forceLiftedIds}
+            pulsingIds={pulsingIds}
           />
         </ZoomableMap>
 
         <ContinentLegend />
+        {showAllMissions && <MissionInspector />}
 
         {/* Wide-screen sidebar — always shown */}
         {isWide && (
@@ -875,7 +926,7 @@ function PlayScreen() {
 
       <ActionPanel
         state={st}
-        dispatch={dispatch}
+        dispatch={trackedDispatch}
         selection={selection}
         onSelectionChange={setSelection}
         onOpenCards={() => { setViewingPlayerId(null); setShowCards(true); }}
@@ -983,7 +1034,8 @@ const styles = StyleSheet.create({
   modeBtn:       { flex: 1, paddingVertical: Spacing.sm, borderRadius: BorderRadius.md, borderWidth: 1, alignItems: 'center' },
   checkboxRow:   { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   checkboxBox:   { width: 22, height: 22, borderRadius: 4, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  playerCard:      { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, gap: Spacing.md },
+  playersGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  playerCard:      { width: '48%', flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.sm, gap: Spacing.sm },
   playerCardHeader:{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   playerColorDot:  { width: 24, height: 24, borderRadius: 12, marginTop: 10 },
   nameInput:       { borderWidth: 1, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, fontSize: 16 },

@@ -84,13 +84,19 @@ export function JoinPanel({ status, players, lobbyConfig, myId, onConnect, onRea
   }, []);
 
   const handlePaste = async () => {
-    const text = await Clipboard.getStringAsync();
-    const parsed = parseAddress(text);
-    if (parsed) {
-      setManualHost(parsed.host);
-      setManualPort(parsed.port);
-      setPasteError(false);
-    } else {
+    try {
+      const text = await Clipboard.getStringAsync();
+      const parsed = parseAddress(text);
+      if (parsed) {
+        setManualHost(parsed.host);
+        setManualPort(parsed.port);
+        setPasteError(false);
+      } else {
+        setPasteError(true);
+        setTimeout(() => setPasteError(false), 2000);
+      }
+    } catch {
+      // AsyncClipboard API unavailable (HTTP context or browser restriction)
       setPasteError(true);
       setTimeout(() => setPasteError(false), 2000);
     }

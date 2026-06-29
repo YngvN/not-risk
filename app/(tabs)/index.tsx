@@ -31,6 +31,10 @@ export default function HomeScreen() {
     router.navigate('/lobby' as never);
   };
 
+  const handleViewMaps = () => {
+    router.navigate('/map' as never);
+  };
+
   const handleSettings = () => {
     router.navigate('/settings' as never);
   };
@@ -108,6 +112,18 @@ export default function HomeScreen() {
               <Ionicons name="wifi-outline" size={18} color={colors.text} />
               <Text variant="body" style={[styles.btnTextSecondary, { color: colors.text }]}>
                 {t('home.newLanGame')}
+              </Text>
+            </View>
+          </Pressable>
+
+          <Pressable
+            onPress={handleViewMaps}
+            style={[styles.btn, styles.btnSecondary, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+          >
+            <View style={styles.btnRow}>
+              <Ionicons name="map-outline" size={18} color={colors.text} />
+              <Text variant="body" style={[styles.btnTextSecondary, { color: colors.text }]}>
+                {t('home.viewMaps')}
               </Text>
             </View>
           </Pressable>

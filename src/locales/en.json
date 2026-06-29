@@ -3,7 +3,8 @@
     "title": "fRISKy",
     "welcome": "World domination awaits.",
     "description": "A Risk-inspired strategy game.",
-    "newLanGame": "New LAN Game"
+    "newLanGame": "New LAN Game",
+    "viewMaps": "View Maps"
   },
   "components": {
     "title": "Components",
@@ -22,7 +23,19 @@
     "themeLight": "Light",
     "themeDark": "Dark",
     "language": "Language",
-    "languageSelect": "Select Language"
+    "languageSelect": "Select Language",
+    "testing": "Testing",
+    "showAllMissions": "Show all secret missions",
+    "showAllMissionsHint": "Displays every player's mission and % progress on the game map (Secret Mission mode only).",
+    "viewComponents": "View UI components",
+    "allowMapEditing": "Allow map editing",
+    "allowMapEditingHint": "Shows placement and connection editing tools in View Maps.",
+    "restoreLabelPositions": "Restore original label positions",
+    "editLabelPlacement": "Edit label placement",
+    "editConnections": "Edit connections",
+    "savePositions": "Save",
+    "resetPositions": "Reset to defaults",
+    "cancelEditing": "Cancel"
   },
   "modal": {
     "open": "Open Modal",
@@ -53,7 +66,7 @@
     "easternUS": "Eastern United States",
     "centralAmerica": "Central America",
     "kamchatkaNote": "→ Kamchatka",
-    "board": "Board"
+    "board": "Original"
   },
   "southAmerica": {
     "title": "South America",
@@ -167,6 +180,9 @@
     "continentAF": "Africa",
     "continentAS": "Asia",
     "continentAU": "Australia"
+  },
+  "nav": {
+    "exitGameTitle": "Exit game?"
   },
   "lobby": {
     "title": "LAN Multiplayer",

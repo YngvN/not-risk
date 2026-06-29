@@ -254,7 +254,8 @@ export function ActionPanel({ state, dispatch, selection, onSelectionChange, onO
                 label={t('game.attackWith').replace('{{n}}', String(n))}
                 onPress={() => {
                   dispatch({ type: 'ATTACK', from, to, attackerDice: n });
-                  onSelectionChange({ phase: 'none' });
+                  // Keep ATTACK_TO selection — PlayScreen resets it when the
+                  // attacker runs out of armies or the player taps Cancel.
                 }}
               />
             ))}

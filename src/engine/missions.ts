@@ -107,6 +107,59 @@ export function checkMission(
   }
 }
 
+// ── Progress (0–1) ───────────────────────────────────────────────────────────
+
+/**
+ * Returns a 0–1 float representing how close a player is to completing
+ * their secret mission. Used for the testing inspector overlay.
+ */
+export function missionProgress(
+  playerId: PlayerId,
+  mission: MissionCard,
+  state: GameState,
+): number {
+  const player = state.players.find(p => p.id === playerId);
+  if (!player || !player.alive) return 0;
+
+  switch (mission.type) {
+    case 'TWO_CONTINENTS': {
+      const owned = getOwnedContinents(state.territories, playerId);
+      const [c1, c2] = mission.continents!;
+      return [c1, c2].filter(c => owned.includes(c)).length / 2;
+    }
+
+    case 'TWO_CONTINENTS_PLUS_ONE': {
+      const owned = getOwnedContinents(state.territories, playerId);
+      const [c1, c2] = mission.continents!;
+      const required = [c1, c2].filter(c => owned.includes(c)).length;
+      const extra = owned.length >= 3 ? 1 : 0;
+      return (required + extra) / 3;
+    }
+
+    case 'HOLD_24':
+      return Math.min(getTerritoryCount(state.territories, playerId) / 24, 1);
+
+    case 'HOLD_18_TWO_ARMIES': {
+      const qualifying = Object.values(state.territories).filter(
+        t => t.owner === playerId && t.armies >= 2,
+      ).length;
+      return Math.min(qualifying / 18, 1);
+    }
+
+    case 'DESTROY_PLAYER': {
+      const target = state.players.find(p => p.color === mission.targetColor);
+      if (!target) return 1;
+      if (target.id === playerId) {
+        return Math.min(getTerritoryCount(state.territories, playerId) / 24, 1);
+      }
+      if (!target.alive) return 1;
+      // Proxy: fraction of the 42 territories the target has already lost
+      const targetOwned = getTerritoryCount(state.territories, target.id);
+      return Math.max(0, 1 - targetOwned / 42);
+    }
+  }
+}
+
 // ── Display label ─────────────────────────────────────────────────────────────
 
 const CONTINENT_NAMES: Record<ContinentId, string> = {

@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * touch-action is NOT an inherited property, so it must target every element.
+ * pan-x pan-y allows scrolling but prevents the browser from handling
+ * pinch-to-zoom gestures. react-native-gesture-handler overrides this
+ * with inline touch-action: none on the ZoomableMap container so pinch
+ * zoom still works there.
+ */
+* {
+  touch-action: pan-x pan-y;
+}

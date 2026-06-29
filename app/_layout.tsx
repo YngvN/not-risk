@@ -7,6 +7,7 @@ import { ThemeProvider } from '../src/context/ThemeContext';
 import { LanguageProvider } from '../src/context/LanguageContext';
 import { GameProvider, useGame } from '../src/context/GameContext';
 import { MultiplayerProvider, useMultiplayer } from '../src/context/MultiplayerContext';
+import { TestingProvider } from '../src/context/TestingContext';
 
 /**
  * Wires MultiplayerContext ↔ GameContext without either knowing about the other.
@@ -44,17 +45,19 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <LanguageProvider>
-          <MultiplayerProvider>
-            <GameProvider>
-              <MultiplayerGameBridge />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  animation: Platform.select({ web: 'fade', default: 'slide_from_right' }),
-                }}
-              />
-            </GameProvider>
-          </MultiplayerProvider>
+          <TestingProvider>
+            <MultiplayerProvider>
+              <GameProvider>
+                <MultiplayerGameBridge />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    animation: Platform.select({ web: 'fade', default: 'slide_from_right' }),
+                  }}
+                />
+              </GameProvider>
+            </MultiplayerProvider>
+          </TestingProvider>
         </LanguageProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

@@ -76,9 +76,13 @@ export function HostPanel({
   const [copied, setCopied] = useState(false);
 
   const copyUrl = async (url: string) => {
-    await Clipboard.setStringAsync(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await Clipboard.setStringAsync(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable in HTTP context — silently ignore
+    }
   };
   const [gameMode, setGameMode] = useState<GameMode>('classic');
   const [randomDeal, setRandomDeal] = useState(false);

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { View } from 'react-native';
 import Svg, { G, Path, Text as SvgText, Circle, Rect } from 'react-native-svg';
 import Animated, {
   useAnimatedProps,
   useSharedValue,
   withSpring,
   withTiming,
+  withSequence,
   runOnJS,
   Easing,
 } from 'react-native-reanimated';
@@ -83,8 +85,11 @@ const SVG_ID_FOR_TERRITORY: Partial<Record<string, string>> = Object.fromEntries
   Object.entries(SVG_ID_TO_TERRITORY).map(([svgId, terrId]) => [terrId, svgId]),
 );
 
-/** Label centroid per SVG path ID, computed from path bounding boxes. */
-const LABEL_POS: Record<string, { x: number; y: number }> = {
+/**
+ * Label centroid per SVG path ID, in the Risk_board.svg coordinate space.
+ * Exported so the map label editor can read and override these positions.
+ */
+export const LABEL_POS: Record<string, { x: number; y: number }> = {
   alaska:                { x: 226, y: 208 },
   northwest_territory:   { x: 306, y: 190 },
   alberta:               { x: 285, y: 240 },
@@ -196,6 +201,10 @@ export interface RiskBoardMapProps {
    * attacker hovered after the enemy target is deselected.
    */
   restoreSelectionId?: string;
+  /** TerritoryIds that should play a red pulse — used to indicate unit losses. */
+  pulsingIds?: ReadonlySet<string>;
+  /** Override label/army-badge positions per svgId (for the map label editor). */
+  labelOverrides?: Record<string, { x: number; y: number }>;
 }
 
 /**
@@ -217,6 +226,8 @@ export function RiskBoardMap({
   tappableIds,
   restoreSelectionId,
   forceLiftedIds,
+  pulsingIds,
+  labelOverrides,
 }: RiskBoardMapProps) {
   const { colors } = useTheme();
   const [selectedSvgId,  setSelectedSvgId]  = useState<string | null>(null);
@@ -271,7 +282,10 @@ export function RiskBoardMap({
   };
 
   return (
-    <Svg viewBox={VIEWBOX} width="100%" style={{ aspectRatio: VIEWBOX_ASPECT }}>
+    // overflow:hidden clips the Alaska→Kamchatka dashed paths that extend
+    // beyond the viewBox, keeping the rendered height exactly at the aspect ratio.
+    <View style={{ width: '100%', aspectRatio: VIEWBOX_ASPECT, overflow: 'hidden' }}>
+    <Svg viewBox={VIEWBOX} width="100%" height="100%">
       {/* Transparent hit-target covering the full viewBox — catches ocean taps to deselect. */}
       <Rect x={191} y={60} width={714} height={614} fill="transparent" onPress={handleBackgroundPress} />
 
@@ -316,9 +330,11 @@ export function RiskBoardMap({
         const isForceLifted = !!(forceLiftedIds && territoryId && forceLiftedIds.has(territoryId));
         const isLifted = (isSelected && isSelectable) || isForceLifted;
 
-        const pos = LABEL_POS[svgId];
+        const pos = labelOverrides?.[svgId] ?? LABEL_POS[svgId];
         const armyCount = armyCounts && territoryId ? armyCounts[territoryId] : undefined;
         const armyDelta = armyDeltas && territoryId ? armyDeltas[territoryId] : undefined;
+
+        const isPulsing = !!(pulsingIds && territoryId && pulsingIds.has(territoryId));
 
         return (
           <TerritoryShape
@@ -330,6 +346,7 @@ export function RiskBoardMap({
             isSelected={isHighlighted}
             isLifted={isLifted}
             isSelectable={isSelectable}
+            isPulsing={isPulsing}
             onPress={handlePress}
             showLabel={showRiskLayer}
             labelPos={pos}
@@ -344,6 +361,7 @@ export function RiskBoardMap({
       })}
 
     </Svg>
+    </View>
   );
 }
 
@@ -361,6 +379,8 @@ interface TerritoryShapeProps {
   /** Called when the spring-back animation completes — used to restore z-order. */
   onLiftEnd?: () => void;
   isSelectable: boolean;
+  /** When true, plays a red double-pulse to signal unit losses. */
+  isPulsing?: boolean;
   onPress: (id: string) => void;
   showLabel: boolean;
   labelPos: { x: number; y: number } | undefined;
@@ -373,7 +393,7 @@ interface TerritoryShapeProps {
 }
 
 function TerritoryShape({
-  svgId, d, fill, stroke, isSelected, isLifted, onLiftEnd, isSelectable, onPress,
+  svgId, d, fill, stroke, isSelected, isLifted, onLiftEnd, isSelectable, isPulsing, onPress,
   showLabel, labelPos, labelText, textColor, bgColor, armyCount, armyDelta,
 }: TerritoryShapeProps) {
   const cx = labelPos?.x ?? 500;
@@ -423,6 +443,22 @@ function TerritoryShape({
     }
   }, [fill]);
 
+  // ── Loss pulse — red double-flash when units are lost ────────────────────────
+  const pulseOpacity = useSharedValue(0);
+
+  React.useEffect(() => {
+    if (!isPulsing) return;
+    pulseOpacity.value = 0;
+    pulseOpacity.value = withSequence(
+      withTiming(0.55, { duration: 120 }),
+      withTiming(0.15, { duration: 180 }),
+      withTiming(0.55, { duration: 120 }),
+      withTiming(0,    { duration: 380 }),
+    );
+  }, [isPulsing]);
+
+  const pulseProps = useAnimatedProps(() => ({ opacity: pulseOpacity.value }));
+
   // ── Animated props ────────────────────────────────────────────────────────────
   const gProps = useAnimatedProps(() => {
     'worklet';
@@ -454,6 +490,9 @@ function TerritoryShape({
 
       {/* Current fill — fades in when fill changes, always carries the stroke */}
       <AnimatedPath d={d} fill={fill} stroke={stroke} animatedProps={pathProps} />
+
+      {/* Red loss-pulse overlay — sits above the fill, below labels */}
+      <AnimatedPath d={d} fill="#ff2020" stroke="none" animatedProps={pulseProps} pointerEvents="none" />
 
       {showLabel && labelPos && (
         <>

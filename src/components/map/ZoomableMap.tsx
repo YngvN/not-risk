@@ -7,6 +7,8 @@ import Animated, {
   clamp,
 } from 'react-native-reanimated';
 
+import type { SharedValue } from 'react-native-reanimated';
+
 /** Imperative handle for programmatic zoom control. */
 export interface ZoomableMapRef {
   /**
@@ -17,6 +19,14 @@ export interface ZoomableMapRef {
    */
   zoomToPoint(px: number, py: number, targetScale: number): void;
   resetZoom(): void;
+  /**
+   * Explicitly tells the map its content height so the clamp can allow
+   * panning to content that overflows the container even at scale=1, and
+   * immediately centers the content vertically if it overflows.
+   */
+  setContentHeight(h: number): void;
+  /** Returns the live transform shared values for external overlays. */
+  getTransform(): { scale: SharedValue<number>; tx: SharedValue<number>; ty: SharedValue<number> };
 }
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from '../../hooks/useTheme';
@@ -52,6 +62,10 @@ function ZoomableMap({ children }, ref) {
   const savedTy = useSharedValue(0);
   const cw = useSharedValue(0);
   const ch = useSharedValue(0);
+  // Natural (unscaled) content dimensions — may differ from container when
+  // the SVG's aspect ratio makes it taller than the visible area.
+  const contentW = useSharedValue(0);
+  const contentH = useSharedValue(0);
 
   const containerRef = useRef<View>(null);
 
@@ -60,13 +74,22 @@ function ZoomableMap({ children }, ref) {
     ch.value = e.nativeEvent.layout.height;
   }, [cw, ch]);
 
+  const onContentLayout = useCallback((e: LayoutChangeEvent) => {
+    contentW.value = e.nativeEvent.layout.width;
+    contentH.value = e.nativeEvent.layout.height;
+  }, [contentW, contentH]);
+
   // ── Clamp helpers ──────────────────────────────────────────────────────────
+  // Uses actual content size so overflowing content (e.g. a tall SVG on a
+  // wide screen) is always reachable by panning even at scale = 1.
   const clampTx = (v: number, s: number) => {
-    const max = (cw.value * (s - 1)) / 2;
+    const w = contentW.value > 0 ? contentW.value : cw.value;
+    const max = Math.max(0, (w * s - cw.value) / 2);
     return Math.max(-max, Math.min(max, v));
   };
   const clampTy = (v: number, s: number) => {
-    const max = (ch.value * (s - 1)) / 2;
+    const h = contentH.value > 0 ? contentH.value : ch.value;
+    const max = Math.max(0, (h * s - ch.value) / 2);
     return Math.max(-max, Math.min(max, v));
   };
 
@@ -90,8 +113,12 @@ function ZoomableMap({ children }, ref) {
     .averageTouches(true)
     .minDistance(5)
     .onUpdate((e) => {
-      tx.value = clamp(savedTx.value + e.translationX, -(cw.value * (scale.value - 1)) / 2, (cw.value * (scale.value - 1)) / 2);
-      ty.value = clamp(savedTy.value + e.translationY, -(ch.value * (scale.value - 1)) / 2, (ch.value * (scale.value - 1)) / 2);
+      const _w = contentW.value > 0 ? contentW.value : cw.value;
+      const _h = contentH.value > 0 ? contentH.value : ch.value;
+      const maxX = Math.max(0, (_w * scale.value - cw.value) / 2);
+      const maxY = Math.max(0, (_h * scale.value - ch.value) / 2);
+      tx.value = clamp(savedTx.value + e.translationX, -maxX, maxX);
+      ty.value = clamp(savedTy.value + e.translationY, -maxY, maxY);
     })
     .onEnd(() => {
       savedTx.value = tx.value;
@@ -149,8 +176,12 @@ function ZoomableMap({ children }, ref) {
           savedTy.value = 0;
         }
       } else {
-        // Two-finger trackpad scroll without pinch → pan (only when zoomed)
-        if (scale.value <= MIN_SCALE) return;
+        // Two-finger trackpad scroll without pinch → pan
+        // Allow pan even at MIN_SCALE when content overflows the container.
+        const _w = contentW.value > 0 ? contentW.value : cw.value;
+        const _h = contentH.value > 0 ? contentH.value : ch.value;
+        const canPan = scale.value > MIN_SCALE || _w > cw.value || _h > ch.value;
+        if (!canPan) return;
         const newTx = clampTx(tx.value - e.deltaX, scale.value);
         const newTy = clampTy(ty.value - e.deltaY, scale.value);
         tx.value = newTx;
@@ -207,13 +238,26 @@ function ZoomableMap({ children }, ref) {
       savedTx.value = 0;
       savedTy.value = 0;
     },
+    setContentHeight(h: number) {
+      contentH.value = h;
+      if (h > ch.value) {
+        const centerTy = -(h - ch.value) / 2;
+        ty.value = centerTy;
+        savedTy.value = centerTy;
+      }
+    },
+    getTransform() {
+      return { scale, tx, ty };
+    },
   }));
 
   return (
     <View ref={containerRef} style={styles.container} onLayout={onLayout}>
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.content, animatedStyle]}>
-          {children}
+          <View onLayout={onContentLayout}>
+            {children}
+          </View>
         </Animated.View>
       </GestureDetector>
 

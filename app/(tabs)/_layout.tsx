@@ -1,95 +1,30 @@
+import { View } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../src/hooks/useTheme';
-import { useLanguage } from '../../src/hooks/useLanguage';
-
-type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
-
-interface TabIconProps {
-  name: IoniconsName;
-  color: string;
-  size: number;
-}
-
-function TabIcon({ name, color, size }: TabIconProps) {
-  return <Ionicons name={name} size={size} color={color} />;
-}
+import { FloatingTabBar } from '../../src/components/layout/FloatingTabBar';
 
 /**
- * Tab bar layout.
- * Pulls tab titles from the active language and colors from the active theme.
- * Add new tabs here when adding new top-level screens.
+ * Tab group layout.
+ * The default tab bar is hidden; navigation is handled by FloatingTabBar —
+ * a floating 3-dot button that opens a slide-up panel.
  */
 export default function TabLayout() {
-  const { colors } = useTheme();
-  const { t } = useLanguage();
-
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.iconActive,
-        tabBarInactiveTintColor: colors.icon,
-        tabBarStyle: {
-          backgroundColor: colors.tabBar,
-          borderTopColor: colors.tabBarBorder,
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: t('home.title'),
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="home-outline" color={color} size={size} />
-          ),
+    <View style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: { display: 'none' },
         }}
-      />
-      <Tabs.Screen
-        name="components"
-        options={{
-          title: t('components.title'),
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="grid-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: t('settings.title'),
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="settings-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="map"
-        options={{
-          title: t('map.tabLabel'),
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="map-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="game"
-        options={{
-          title: t('game.tabLabel'),
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="game-controller-outline" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="lobby"
-        options={{
-          title: t('lobby.tabLabel'),
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="wifi-outline" color={color} size={size} />
-          ),
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen name="index"      options={{ title: 'fRISKy' }} />
+        <Tabs.Screen name="game"       options={{ title: 'Game' }} />
+        <Tabs.Screen name="lobby"      options={{ title: 'LAN' }} />
+        <Tabs.Screen name="map"        options={{ title: 'Map' }} />
+        <Tabs.Screen name="settings"   options={{ title: 'Settings' }} />
+        <Tabs.Screen name="components" options={{ title: 'Components' }} />
+      </Tabs>
+
+      <FloatingTabBar />
+    </View>
   );
 }
