@@ -7,7 +7,7 @@ import { Text } from '../../src/components/ui/Text';
 import { ZoomableMap, type ZoomableMapRef } from '../../src/components/map/ZoomableMap';
 import { RiskBoardMap, TERRITORY_LABEL_POS } from '../../src/components/map/RiskBoardMap';
 import {
-  DiceModal, ActionPanel, CardHandModal,
+  BattleResultPanel, ActionPanel, CardHandModal,
   PassDeviceScreen, MissionCard, GameSidePanel, GameSlidePanel,
   ContinentLegend,
   MissionInspector,
@@ -24,6 +24,7 @@ import { missionDescription } from '../../src/engine/missions';
 import { TERRITORIES, type Territory } from '../../src/constants/riskWorldTerritories';
 import { areAdjacent, getConnectedOwned, getAdjacentIds } from '../../src/engine/board';
 import type { PlayerConfig, SetupMode } from '../../src/engine/setup';
+import { pickAiName } from '../../src/constants/aiNames';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -177,12 +178,15 @@ function SetupScreen() {
 
   const addAI = () => {
     if (players.length >= 6) return;
-    setPlayers(prev => [...prev, {
-      name: t('game.aiLabel'),
-      color: nextFreeColor(),
-      isAI: true,
-      difficulty: lastAIDifficulty,
-    }]);
+    setPlayers(prev => {
+      const usedNames = prev.filter(p => p.isAI).map(p => p.name);
+      return [...prev, {
+        name: pickAiName(usedNames),
+        color: nextFreeColor(),
+        isAI: true,
+        difficulty: lastAIDifficulty,
+      }];
+    });
   };
 
   const removePlayer = (i: number) => {
@@ -539,6 +543,11 @@ function PlayScreen() {
   const zoomMapRef = useRef<ZoomableMapRef>(null);
   // Tracks which territories were involved in the most recent attack dispatch
   const lastAttackRef = useRef<{ from: TerritoryId; to: TerritoryId } | null>(null);
+  // Stores attacker/defender display names captured before the state changes on capture
+  const battlePlayersRef = useRef<{ attackerName: string; defenderName: string }>({
+    attackerName: '',
+    defenderName: '',
+  });
   // Tracks whether we've already saved the pre-selection zoom for this selection session
   const zoomSavedRef = useRef(false);
 
@@ -551,9 +560,16 @@ function PlayScreen() {
   const trackedDispatch = React.useCallback((action: GameAction) => {
     if (action.type === 'ATTACK') {
       lastAttackRef.current = { from: action.from, to: action.to };
+      // Capture names BEFORE dispatch changes territory ownership on capture
+      const defOwner = st.territories[action.to]?.owner;
+      const defPlayer = st.players.find(p => p.id === defOwner);
+      battlePlayersRef.current = {
+        attackerName: activePlayer.name,
+        defenderName: defPlayer?.name ?? t('game.defender'),
+      };
     }
     dispatch(action);
-  }, [dispatch]);
+  }, [dispatch, st, activePlayer, t]);
 
   // ── Zoom helpers (attack phase) ───────────────────────────────────────────
 
@@ -952,9 +968,19 @@ function PlayScreen() {
         }}
       />
 
-      <DiceModal
+      <BattleResultPanel
         result={showDice ? st.lastBattleResult : null}
+        attackerName={battlePlayersRef.current.attackerName}
+        defenderName={battlePlayersRef.current.defenderName}
+        canAttackAgain={
+          showDice &&
+          !st.captureContext &&
+          selection.phase === 'ATTACK_TO' &&
+          (st.territories[selection.from]?.armies ?? 0) >= 2
+        }
+        onAttackAgain={() => setShowDice(false)}
         onDismiss={() => setShowDice(false)}
+        isWide={isWide}
       />
 
       <CardHandModal
