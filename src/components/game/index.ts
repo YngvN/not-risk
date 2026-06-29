@@ -10,3 +10,4 @@ export { GameSidePanel, GameSlidePanel, PANEL_WIDTH } from './GameSidePanel';
 export { ContinentLegend } from './ContinentLegend';
 export { MissionInspector } from './MissionInspector';
 export { BattleResultPanel } from './BattleResultPanel';
+export { SpinWheelScreen } from './SpinWheelScreen';

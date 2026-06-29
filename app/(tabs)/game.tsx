@@ -12,6 +12,7 @@ import {
   PassDeviceScreen, MissionCard, GameSidePanel, GameSlidePanel,
   ContinentLegend,
   MissionInspector,
+  SpinWheelScreen,
   type SelectionMode,
 } from '../../src/components/game';
 import { useGame, PLAYER_COLOR_HEX } from '../../src/context/GameContext';
@@ -39,6 +40,15 @@ import { multiplayerService } from '../../src/services/MultiplayerService';
 const SETUP_KEY = '@last_game_setup';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 const ALL_COLORS: PlayerColor[] = ['red', 'blue', 'green', 'yellow', 'black', 'pink'];
 
@@ -156,8 +166,7 @@ function SetupScreen() {
   const { startGame, hasSavedGame, resumeGame } = useGame();
   const {
     status: mpStatus, serverIp, serverPort, lobbyPlayers,
-    connect: mpConnect, disconnect: mpDisconnect,
-    markReady: mpMarkReady,
+    connect: mpConnect, disconnect: mpDisconnect, markReady: mpMarkReady,
   } = useMultiplayer();
   const { colors } = useTheme();
   const { t } = useLanguage();
@@ -274,7 +283,8 @@ function SetupScreen() {
       // The server auto-starts once all connected players are ready.
       mpMarkReady();
     } else {
-      const configs: PlayerConfig[] = players.map(p => ({
+      // Shuffle turn order so the starting player is random each game.
+      const configs: PlayerConfig[] = shuffle(players).map(p => ({
         name: p.name || t('game.humanLabel'),
         color: p.color,
         isAI: p.isAI,
@@ -315,25 +325,16 @@ function SetupScreen() {
 
   return (
     <Screen scrollable>
-      {/* Title row + Make Online button */}
+      {/* Title row + Start Game button */}
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md }}>
         <Text variant="h2" style={{ color: colors.text, flex: 1 }}>{t('game.newGame')}</Text>
-        {isOnline ? (
-          <Pressable
-            onPress={mpDisconnect}
-            style={[styles.addBtnSmall, { backgroundColor: colors.error + '22', borderColor: colors.error }]}
-          >
-            <Text variant="caption" style={{ color: colors.error, fontWeight: '600' }}>{t('game.goLocal')}</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={() => setShowOnlineModal(true)}
-            style={[styles.addBtnSmall, { backgroundColor: colors.surface, borderColor: colors.primary }]}
-          >
-            <Ionicons name="wifi-outline" size={13} color={colors.primary} />
-            <Text variant="caption" style={{ color: colors.primary, fontWeight: '600' }}> {t('game.makeOnline')}</Text>
-          </Pressable>
-        )}
+        <Pressable
+          onPress={handleStart}
+          disabled={totalPlayers < 2}
+          style={[styles.addBtnSmall, { backgroundColor: totalPlayers < 2 ? colors.border : colors.success }]}
+        >
+          <Text variant="caption" style={{ color: '#fff', fontWeight: '700' }}>{t('game.startGame')}</Text>
+        </Pressable>
       </View>
 
       {/* "Make Online" connection modal */}
@@ -426,6 +427,26 @@ function SetupScreen() {
         <Checkbox checked={rules.missionWinTiming === 'own_turn'} onToggle={() => toggleRule('missionWinTiming', rules.missionWinTiming === 'own_turn' ? 'immediate' : 'own_turn')} label={t('game.ruleMissionOwnTurn')} />
       </View>
 
+      {/* Make Online / Go Local — sits just above the players list */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm }}>
+        {isOnline ? (
+          <Pressable
+            onPress={mpDisconnect}
+            style={[styles.addBtnSmall, { backgroundColor: colors.error + '22', borderColor: colors.error }]}
+          >
+            <Text variant="caption" style={{ color: colors.error, fontWeight: '600' }}>{t('game.goLocal')}</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => setShowOnlineModal(true)}
+            style={[styles.addBtnSmall, { backgroundColor: colors.surface, borderColor: colors.primary }]}
+          >
+            <Ionicons name="wifi-outline" size={13} color={colors.primary} />
+            <Text variant="caption" style={{ color: colors.primary, fontWeight: '600' }}> {t('game.makeOnline')}</Text>
+          </Pressable>
+        )}
+      </View>
+
       {/* Per-player config */}
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xs, gap: Spacing.sm }}>
         <Text variant="body" style={{ color: colors.textSecondary, flex: 1 }}>
@@ -450,8 +471,18 @@ function SetupScreen() {
       </View>
 
       <View style={styles.playersGrid}>
+      <AnimatePresence>
       {players.map((player, i) => (
-        <View key={i} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: player.isAI ? colors.primary : colors.border }]}>
+        <MotiView
+          key={player.color}
+          from={{ opacity: 0, translateX: 24 }}
+          animate={{ opacity: 1, translateX: 0 }}
+          exit={{ opacity: 0, translateX: 24 }}
+          transition={{ type: 'timing', duration: 200 }}
+          exitTransition={{ type: 'timing', duration: 160 }}
+          style={{ width: '48%' }}
+        >
+        <View style={[styles.playerCard, { backgroundColor: colors.card, borderColor: player.isAI ? colors.primary : colors.border, width: '100%' }]}>
           <View style={[styles.playerColorDot, { backgroundColor: PLAYER_COLOR_HEX[player.color] }]} />
           <View style={{ flex: 1, gap: Spacing.xs }}>
             <View style={styles.playerCardHeader}>
@@ -512,16 +543,11 @@ function SetupScreen() {
             )}
           </View>
         </View>
+        </MotiView>
       ))}
+      </AnimatePresence>
       </View>
 
-      <Pressable
-        onPress={handleStart}
-        disabled={totalPlayers < 2}
-        style={[styles.startBtn, { backgroundColor: totalPlayers < 2 ? colors.border : colors.primary, marginTop: Spacing.sm }]}
-      >
-        <Text variant="body" style={{ color: '#fff', fontWeight: '700' }}>{t('game.startGame')}</Text>
-      </Pressable>
     </Screen>
   );
 }
@@ -1114,7 +1140,7 @@ function PlayScreen() {
           setViewingPlayerId(playerId);
           setShowCards(true);
         }}
-        onShowMission={st.mode === 'mission' && activePlayer.mission ? () => setShowMission(true) : undefined}
+        onShowMission={st.mode === 'mission' && activePlayer.mission && !activePlayer.isAI ? () => setShowMission(true) : undefined}
         onToggleLog={!isWide ? () => setLogOpen(v => !v) : undefined}
         logOpen={logOpen}
         logBadge={reinforcementLog.length}
@@ -1207,7 +1233,32 @@ function PlayScreen() {
 
 export default function GameScreen() {
   const { state } = useGame();
+  const { multiplayerMode } = useGame();
+  const prevStateRef = useRef<typeof state>(null);
+  const [showWheel, setShowWheel] = useState(false);
+
+  // Show the wheel when a brand-new game starts (fresh state, not a resume).
+  // Detect "new game" by: state transitions null→non-null AND the event log is empty.
+  // Skip in multiplayer — server already randomises order.
+  React.useEffect(() => {
+    if (!prevStateRef.current && state && state.eventLog.length === 0 && multiplayerMode !== 'multiplayer') {
+      setShowWheel(true);
+    }
+    prevStateRef.current = state;
+  }, [state, multiplayerMode]);
+
   if (!state) return <SetupScreen />;
+
+  if (showWheel) {
+    return (
+      <SpinWheelScreen
+        players={state.players}
+        firstPlayerId={state.activePlayerId}
+        onDone={() => setShowWheel(false)}
+      />
+    );
+  }
+
   if (state.phase === 'GAME_OVER') return <GameOverScreen />;
   if (state.phase === 'HQ_SELECTION') return <HQSelectionScreen />;
   return <PlayScreen />;

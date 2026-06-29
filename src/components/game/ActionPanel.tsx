@@ -384,7 +384,7 @@ function AttackDicePanel({ from, to, maxDice, dispatch, onCancel }: AttackDicePa
           <Text variant="caption" style={{ color: colors.textSecondary, textAlign: 'center' }}>
             {t('game.attackWith').replace('{{n}}', String(clamped))}
           </Text>
-          <Slider value={clamped} min={1} max={maxDice} step={1} onChange={setDice} />
+          <Slider value={clamped} min={1} max={maxDice} step={1} onChange={setDice} hideSideButtons />
         </>
       ) : (
         <Text variant="caption" style={{ color: colors.textSecondary }}>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MotiView, AnimatePresence } from 'moti';
 import { View, Pressable, StyleSheet, TextInput, Alert } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { QrCode } from '../QrCode';
@@ -275,30 +276,50 @@ export function HostPanel({
       </Text>
 
       {/* LAN players — read-only, show ready state */}
-      {players.map(player => (
-        <View key={player.id} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: player.isReady ? colors.success : colors.primary }]}>
-          <View style={[styles.colorDot, { backgroundColor: PLAYER_COLOR_HEX[player.color] }]} />
-          <View style={{ flex: 1, gap: Spacing.xs }}>
-            <View style={styles.cardHeader}>
-              <Text variant="body" style={{ color: colors.text, flex: 1, fontWeight: '600' }}>
-                {player.name}
-              </Text>
-              {player.isReady && (
-                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-              )}
-              <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                <Text variant="caption" style={{ color: '#fff', fontWeight: '700', fontSize: 10 }}>LAN</Text>
+      <AnimatePresence>
+        {players.map(player => (
+          <MotiView
+            key={player.id}
+            from={{ opacity: 0, translateX: 24 }}
+            animate={{ opacity: 1, translateX: 0 }}
+            exit={{ opacity: 0, translateX: 24 }}
+            transition={{ type: 'timing', duration: 200 }}
+            exitTransition={{ type: 'timing', duration: 160 }}
+          >
+            <View style={[styles.playerCard, { backgroundColor: colors.card, borderColor: player.isReady ? colors.success : colors.primary }]}>
+              <View style={[styles.colorDot, { backgroundColor: PLAYER_COLOR_HEX[player.color] }]} />
+              <View style={{ flex: 1, gap: Spacing.xs }}>
+                <View style={styles.cardHeader}>
+                  <Text variant="body" style={{ color: colors.text, flex: 1, fontWeight: '600' }}>
+                    {player.name}
+                  </Text>
+                  {player.isReady && (
+                    <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                  )}
+                  <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+                    <Text variant="caption" style={{ color: '#fff', fontWeight: '700', fontSize: 10 }}>LAN</Text>
+                  </View>
+                </View>
               </View>
             </View>
-          </View>
-        </View>
-      ))}
+          </MotiView>
+        ))}
+      </AnimatePresence>
 
       {/* Local human slots */}
+      <AnimatePresence>
       {localSlots.map((slot, i) => {
         const available = ALL_COLORS.filter(c => !takenColors.includes(c) || c === slot.color);
         return (
-          <View key={`local-${i}`} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <MotiView
+            key={slot.color}
+            from={{ opacity: 0, translateX: 24 }}
+            animate={{ opacity: 1, translateX: 0 }}
+            exit={{ opacity: 0, translateX: 24 }}
+            transition={{ type: 'timing', duration: 200 }}
+            exitTransition={{ type: 'timing', duration: 160 }}
+          >
+          <View style={[styles.playerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.colorDot, { backgroundColor: PLAYER_COLOR_HEX[slot.color] }]} />
             <View style={{ flex: 1, gap: Spacing.xs }}>
               <View style={styles.cardHeader}>
@@ -327,14 +348,25 @@ export function HostPanel({
               </View>
             </View>
           </View>
+          </MotiView>
         );
       })}
+      </AnimatePresence>
 
       {/* AI slots */}
+      <AnimatePresence>
       {aiSlots.map((slot, i) => {
         const available = ALL_COLORS.filter(c => !takenColors.includes(c) || c === slot.color);
         return (
-          <View key={`ai-${i}`} style={[styles.playerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <MotiView
+            key={slot.color}
+            from={{ opacity: 0, translateX: 24 }}
+            animate={{ opacity: 1, translateX: 0 }}
+            exit={{ opacity: 0, translateX: 24 }}
+            transition={{ type: 'timing', duration: 200 }}
+            exitTransition={{ type: 'timing', duration: 160 }}
+          >
+          <View style={[styles.playerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.colorDot, { backgroundColor: PLAYER_COLOR_HEX[slot.color] }]} />
             <View style={{ flex: 1, gap: Spacing.xs }}>
               <View style={styles.cardHeader}>
@@ -373,8 +405,10 @@ export function HostPanel({
               </View>
             </View>
           </View>
+          </MotiView>
         );
       })}
+      </AnimatePresence>
 
       {/* Add buttons */}
       {totalPlayers < 6 && (
